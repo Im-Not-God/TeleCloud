@@ -1,0 +1,5 @@
+{
+  "name": "TeleCloud",
+  "description": "A secure, client-side Telegram file manager that allows you to upload and download files using your Telegram Bot as unlimited cloud storage.",
+  "requestFramePermissions": []
+}
