@@ -1,6 +1,5 @@
-
-import React, { useState } from 'react';
-import { Download, Loader2, Link as LinkIcon, Check, Trash2, Folder, MoveRight, Eye } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, Loader2, Link as LinkIcon, Check, Trash2, Folder, MoveRight, Eye, MoreVertical } from 'lucide-react';
 import { FileIcon, defaultStyles } from 'react-file-icon';
 import { TelegramMessage, AppConfig } from '../types';
 import { formatBytes } from '../constants';
@@ -20,6 +19,7 @@ export const FileCard: React.FC<FileCardProps> = ({
 }) => {
   const [isCopying, setIsCopying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   const doc = message.document;
   const isFolder = doc?.is_folder;
@@ -48,13 +48,29 @@ export const FileCard: React.FC<FileCardProps> = ({
   };
 
   const extension = getExtension(fileName);
+  
   // Safe access to styles to prevent crash if library import is partial/undefined
   const safeStyles = defaultStyles || {};
-  // @ts-ignore - defaultStyles is an object where keys are extensions
+  // @ts-ignore
   const fileStyle = safeStyles[extension] || {};
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (showMenu) {
+        const handleClickOutside = () => setShowMenu(false);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }
+  }, [showMenu]);
+
+  const [compressed, setCompressed] = useState(false);
+  // setCompressed(true);
+  useEffect(() => {
+    setCompressed(true);
+  }, []);
   const handleDownload = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setShowMenu(false);
       if (!fileId || isFolder) return;
       const url = getFileDownloadUrl(config, fileId, fileName);
       window.open(url, '_blank');
@@ -62,6 +78,7 @@ export const FileCard: React.FC<FileCardProps> = ({
 
   const handlePreview = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setShowMenu(false);
       if (!fileId || !isPreviewable) return;
       const url = getFileDownloadUrl(config, fileId, fileName);
       onPreview(url, fileName, mimeType);
@@ -69,6 +86,7 @@ export const FileCard: React.FC<FileCardProps> = ({
 
   const handleCopyLink = async (e: React.MouseEvent) => {
       e.stopPropagation();
+      // Don't close menu immediately if copying to show feedback
       if (isCopying || isFolder) return;
       setIsCopying(true);
       try {
@@ -77,10 +95,14 @@ export const FileCard: React.FC<FileCardProps> = ({
           if (url) {
                await navigator.clipboard.writeText(url);
                setCopied(true);
-               setTimeout(() => setCopied(false), 2000);
+               setTimeout(() => {
+                   setCopied(false);
+                  //  setShowMenu(false);
+               }, 2000);
           }
       } catch (error) {
           console.error(error);
+          setIsCopying(false);
       } finally {
           setIsCopying(false);
       }
@@ -88,14 +110,21 @@ export const FileCard: React.FC<FileCardProps> = ({
 
   const handleDeleteClick = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setShowMenu(false);
       if (!actionId) return;
       onDeleteClick(actionId, fileName);
   };
 
   const handleMoveClick = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setShowMenu(false);
       if (!actionId) return;
       onMoveClick(actionId, doc?.parent_id || null);
+  };
+
+  const handleMenuToggle = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowMenu(!showMenu);
   };
 
   const dateStr = new Date(message.date * 1000).toLocaleDateString(undefined, {
@@ -108,48 +137,9 @@ export const FileCard: React.FC<FileCardProps> = ({
   if (folderStats.files > 0) folderInfo.push(`${folderStats.files} file${folderStats.files !== 1 ? 's' : ''}`);
   const folderInfoStr = folderInfo.length > 0 ? folderInfo.join(', ') : 'Empty';
 
-  return (
-    <div 
-        className={`bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200 group p-4 flex items-center justify-between ${isFolder ? 'cursor-pointer hover:bg-slate-50' : ''}`}
-    >
-      <div className="flex items-center gap-4 overflow-hidden flex-1">
-        <div 
-            onClick={isFolder ? undefined : handlePreview}
-            className={`w-12 h-12 flex items-center justify-center shrink-0 relative ${isFolder ? 'rounded-lg bg-yellow-50 text-yellow-500' : ''} ${isPreviewable ? 'cursor-pointer hover:scale-105 transition-transform' : ''}`}
-        >
-          {isFolder ? (
-             <Folder className="w-8 h-8 fill-yellow-100" />
-          ) : (
-             <div className="w-8 h-8 relative">
-                 <FileIcon extension={extension} {...fileStyle} />
-                 {/* Tiny Play/Eye overlay on icon for previewable items */}
-                 {isPreviewable && (
-                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Eye className="w-3 h-3 text-telegram-500" />
-                    </div>
-                 )}
-             </div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-slate-900 truncate" title={fileName}>
-            {fileName}
-          </h3>
-          {/* <div className="flex items-center gap-2 mt-1">
-            {isFolder && <span className="text-xs text-slate-500">{folderInfoStr}</span>}
-            {!isFolder && <span className="text-xs text-slate-500">{formatBytes(fileSize || 0)}</span>}
-            {!isFolder && <span className="w-1 h-1 rounded-full bg-slate-300"></span>}
-            <span className="text-xs text-slate-400">{dateStr}</span> */}
-          <div className="flex items-center gap-2 mt-1 min-w-0">
-            {isFolder && <span className="text-xs text-slate-500 truncate">{folderInfoStr}</span>}
-            {!isFolder && <span className="text-xs text-slate-500 whitespace-nowrap">{formatBytes(fileSize || 0)}</span>}
-            {!isFolder && <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>}
-            <span className="text-xs text-slate-400 truncate">{dateStr}</span>
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex items-center gap-1 pl-2 shrink-0">
+  // --- Render Action Buttons (Reusable) ---
+  const ActionButtons = () => (
+      <>
         {!isFolder && (
             <>
                 {isPreviewable && (
@@ -202,7 +192,94 @@ export const FileCard: React.FC<FileCardProps> = ({
         >
             <Trash2 className="w-5 h-5" />
         </button>
+      </>
+  );
+
+  return (
+    <div 
+        className={`bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200 group p-4 flex items-center justify-between relative ${isFolder ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+    >
+      <div className="flex items-center gap-4 overflow-hidden flex-1 mr-2">
+        <div 
+            onClick={isFolder ? undefined : handlePreview}
+            className={`w-12 h-12 flex items-center justify-center shrink-0 relative ${isFolder ? 'rounded-lg bg-yellow-50 text-yellow-500' : ''} ${isPreviewable ? 'cursor-pointer hover:scale-105 transition-transform' : ''}`}
+        >
+          {isFolder ? (
+             <Folder className="w-8 h-8 fill-yellow-100" />
+          ) : (
+             <div className="w-8 h-8 relative">
+                 <FileIcon extension={extension} {...fileStyle} />
+                 {isPreviewable && (
+                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
+                        <Eye className="w-3 h-3 text-telegram-500" />
+                    </div>
+                 )}
+             </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-medium text-slate-900 truncate pr-2" title={fileName}>
+            {fileName}
+          </h3>
+          {/* <div className="flex items-center gap-2 mt-1">
+            {isFolder && <span className="text-xs text-slate-500">{folderInfoStr}</span>}
+            {!isFolder && <span className="text-xs text-slate-500">{formatBytes(fileSize || 0)}</span>}
+            {!isFolder && <span className="w-1 h-1 rounded-full bg-slate-300"></span>}
+            <span className="text-xs text-slate-400">{dateStr}</span> */}
+          <div className="flex items-center gap-2 mt-1 min-w-0 text-xs text-slate-500">
+            {isFolder && <span className="truncate">{folderInfoStr}</span>}
+            {!isFolder && <span className="whitespace-nowrap">{formatBytes(fileSize || 0)}</span>}
+            {!isFolder && <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>}
+            <span className="text-slate-400 truncate">{dateStr}</span>
+          </div>
+        </div>
       </div>
+      
+      {/* Desktop Actions (Hidden on Mobile) */}
+      {!compressed ? (
+        <div className="items-center gap-1 pl-2 shrink-0">
+          <ActionButtons />
+        </div>
+      ) : (
+        <div className="relative">
+          <button 
+            onClick={handleMenuToggle}
+            className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
+          >
+            <MoreVertical className="w-5 h-5" />
+          </button>
+
+          {/* Dropdown Menu */}
+          {showMenu && (
+            <div className="absolute right-full bottom-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                {!isFolder && (
+                    <>
+                        {isPreviewable && (
+                            <button onClick={handlePreview} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3">
+                                <Eye className="w-4 h-4 text-slate-400" /> Preview
+                            </button>
+                        )}
+                        <button onClick={handleCopyLink} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3">
+                             {copied ? <Check className="w-4 h-4 text-green-500" /> : <LinkIcon className="w-4 h-4 text-slate-400" />}
+                             Copy Link
+                        </button>
+                        <button onClick={handleDownload} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3">
+                            <Download className="w-4 h-4 text-slate-400" /> Download
+                        </button>
+                        <div className="h-px bg-slate-100 my-1"></div>
+                    </>
+                )}
+                
+                <button onClick={handleMoveClick} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3">
+                    <MoveRight className="w-4 h-4 text-orange-400" /> Move to...
+                </button>
+                <button onClick={handleDeleteClick} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3">
+                    <Trash2 className="w-4 h-4" /> Delete
+                </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
