@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Download } from 'lucide-react';
+import { X, Loader2, Download, FileText } from 'lucide-react';
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -12,17 +12,52 @@ interface PreviewModalProps {
 
 export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, url, fileName, mimeType }) => {
   const [isLoading, setIsLoading] = useState(true);
+  const [textContent, setTextContent] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen) setIsLoading(true);
-  }, [isOpen, url]);
-
-  if (!isOpen) return null;
-
+  // Determine file type category
   const isVideo = mimeType.startsWith('video/');
   const isImage = mimeType.startsWith('image/');
   const isAudio = mimeType.startsWith('audio/');
   const isPdf = mimeType.includes('pdf');
+  
+  // Check for text/code types
+  const isText = 
+    mimeType.startsWith('text/') || 
+    mimeType.includes('json') || 
+    mimeType.includes('xml') || 
+    mimeType.includes('javascript') ||
+    /\.(txt|json|md|xml|js|ts|css|html|log|sql|ini|conf)$/i.test(fileName);
+
+  useEffect(() => {
+    if (isOpen) {
+        setIsLoading(true);
+        setTextContent(null);
+        
+        if (isText) {
+            // Fetch text content
+            fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error("Failed to load text");
+                    return res.text();
+                })
+                .then(text => {
+                    // Limit preview size to avoid browser crash on huge logs
+                    if (text.length > 500000) {
+                        setTextContent(text.substring(0, 500000) + "\n\n...[File truncated for preview]...");
+                    } else {
+                        setTextContent(text);
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    setTextContent("Error loading file content.");
+                })
+                .finally(() => setIsLoading(false));
+        }
+    }
+  }, [isOpen, url, isText]);
+
+  if (!isOpen) return null;
 
   const handleLoad = () => setIsLoading(false);
 
@@ -55,7 +90,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, url
         {/* Content */}
         <div className="flex-1 flex items-center justify-center overflow-hidden rounded-lg relative bg-black">
            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center text-white/50">
+              <div className="absolute inset-0 flex items-center justify-center text-white/50 z-20">
                  <Loader2 className="w-8 h-8 animate-spin" />
               </div>
            )}
@@ -94,11 +129,31 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, url
            )}
 
            {isPdf && (
-              <iframe src={url} className="w-full h-full bg-white" onLoad={handleLoad} title="PDF Preview"></iframe>
+              <iframe 
+                src={url} 
+                className="w-full h-full bg-white" 
+                onLoad={handleLoad} 
+                title="PDF Preview"
+              ></iframe>
            )}
 
-           {!isVideo && !isImage && !isAudio && !isPdf && (
+           {isText && (
+               <div className="w-full h-full bg-white overflow-auto p-8 font-mono text-sm text-slate-800">
+                   {textContent !== null ? (
+                       <pre className="whitespace-pre-wrap break-words">{textContent}</pre>
+                   ) : (
+                       <div className="h-full flex items-center justify-center">
+                           <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
+                       </div>
+                   )}
+               </div>
+           )}
+
+           {!isVideo && !isImage && !isAudio && !isPdf && !isText && (
               <div className="text-white/60 text-center">
+                 <div className="mb-4 flex justify-center">
+                    <FileText className="w-16 h-16 opacity-50" />
+                 </div>
                  <p className="mb-2">Preview not available for this file type.</p>
                  <a href={url} download className="text-telegram-400 hover:underline">Download to view</a>
               </div>

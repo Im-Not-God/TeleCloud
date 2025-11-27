@@ -45,7 +45,9 @@ const PendingFileItem = ({
   const isPreviewable = file.type.startsWith('image/') || 
                         file.type.startsWith('video/') || 
                         file.type.startsWith('audio/') || 
-                        file.type === 'application/pdf';
+                        file.type === 'application/pdf' ||
+                        file.type.startsWith('text/') ||
+                        /\.(txt|json|md|xml|js|ts|css|html|log|sql|ini|conf)$/i.test(file.name);
 
   useEffect(() => {
     // Create preview for supported media types
@@ -86,7 +88,7 @@ const PendingFileItem = ({
       }
     }
     
-    // Fallback (and for Audio/PDF) show Icon
+    // Fallback (and for Audio/PDF/Text) show Icon
     return (
         <div className="w-8 h-8">
             <FileIcon extension={ext} {...iconStyle} />
@@ -680,6 +682,7 @@ function App() {
             <div className="flex items-center gap-3">
                <button
                  onClick={() => setIsCreateFolderOpen(true)}
+                 disabled={!config.workerUrl}
                  className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:text-telegram-600 hover:border-telegram-200 rounded-lg text-sm font-medium transition-all shadow-sm"
                >
                  <FolderPlus className="w-4 h-4" />
