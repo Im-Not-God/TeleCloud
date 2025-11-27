@@ -143,9 +143,10 @@ export const FileCard: React.FC<FileCardProps> = ({
           ) : (
              <div className="w-8 h-8 relative">
                  <FileIcon extension={extension} {...fileStyle} />
+                 {/* Always show Eye icon if previewable, with better styling */}
                  {isPreviewable && (
-                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-                        <Eye className="w-3 h-3 text-telegram-500" />
+                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm border border-slate-100 text-telegram-500">
+                        <Eye className="w-3 h-3" />
                     </div>
                  )}
              </div>
@@ -160,7 +161,7 @@ export const FileCard: React.FC<FileCardProps> = ({
             {isFolder && <span className="truncate">{folderInfoStr}</span>}
             {!isFolder && <span className="whitespace-nowrap">{formatBytes(fileSize || 0)}</span>}
             {!isFolder && <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>}
-            <span className="text-slate-400 truncate">{dateStr}</span>
+                <span className="text-slate-400 truncate">{dateStr}</span>
           </div>
         </div>
       </div>
