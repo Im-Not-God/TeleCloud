@@ -193,6 +193,9 @@ function App() {
   const [uploadStatuses, setUploadStatuses] = useState<FileUploadStatus[]>([]);
   const [networkSpeed, setNetworkSpeed] = useState<string>('0 B/s');
   
+  // Drag and Drop State
+  const [isDragging, setIsDragging] = useState(false);
+
   // Refs for tracking concurrent upload progress
   // Maps index -> { loaded, total }
   const filesProgressRef = useRef<{ [key: number]: { loaded: number, total: number } }>({});
@@ -302,20 +305,16 @@ function App() {
     };
   }, [isUploading]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selectedFiles = Array.from(e.target.files || []);
-      if (selectedFiles.length === 0) return;
-
+  // Reusable file processor
+  const processFiles = (newFiles: File[]) => {
       const validFiles: File[] = [];
       let skippedCount = 0;
 
-      selectedFiles.forEach(f => {
+      newFiles.forEach(f => {
           if (f.size > 50 * 1024 * 1024) {
               skippedCount++;
           } else {
-              // Avoid exact duplicates in pending list
-              const exists = pendingFiles.some(pf => pf.name === f.name && pf.size === f.size && pf.lastModified === f.lastModified);
-              if (!exists) validFiles.push(f);
+              validFiles.push(f);
           }
       });
 
@@ -324,9 +323,56 @@ function App() {
       } else {
           setError(null);
       }
+      
+      if (validFiles.length > 0) {
+          setPendingFiles(prev => {
+             // Filter duplicates against existing pending files
+             const uniqueNewFiles = validFiles.filter(nf => 
+                 !prev.some(pf => pf.name === nf.name && pf.size === nf.size && pf.lastModified === nf.lastModified)
+             );
+             return [...prev, ...uniqueNewFiles];
+          });
+      }
+  };
 
-      setPendingFiles(prev => [...prev, ...validFiles]);
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = Array.from(e.target.files || []);
+      if (selectedFiles.length === 0) return;
+      processFiles(selectedFiles);
       e.target.value = ''; // Reset input
+  };
+
+  // Drag and Drop Handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!config.botToken || isUploading) return;
+      setIsDragging(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!config.botToken || isUploading) return;
+      setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Only disable if we actually leave the container (not entering a child)
+      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      if (!config.botToken || isUploading) return;
+      
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) processFiles(files);
   };
 
   const handleRemovePending = (index: number) => {
@@ -544,7 +590,13 @@ function App() {
           )}
 
           {/* Upload & Preview Zone */}
-          <div className="max-w-5xl mx-auto relative group">
+          <div 
+            className="max-w-5xl mx-auto relative group"
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <div className="absolute -inset-1 bg-gradient-to-r from-telegram-500 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
             <div className="relative bg-white dark:bg-slate-800 rounded-xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm text-center space-y-4">
               
@@ -680,6 +732,17 @@ function App() {
                 </>
               )}
             </div>
+
+            {/* Drag & Drop Overlay */}
+            {isDragging && (
+                <div className="absolute inset-0 z-50 bg-white/90 dark:bg-slate-800/95 backdrop-blur-sm border-2 border-dashed border-telegram-500 rounded-xl flex flex-col items-center justify-center animate-in fade-in duration-200 cursor-copy">
+                    <div className="bg-telegram-50 dark:bg-telegram-900/30 p-6 rounded-full shadow-xl shadow-telegram-500/10 mb-4 animate-bounce">
+                        <UploadCloud className="w-12 h-12 text-telegram-500" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white">Drop files to upload</h3>
+                    <p className="text-slate-500 dark:text-slate-400 mt-2">Release to add to pending list</p>
+                </div>
+            )}
           </div>
 
           {/* Breadcrumbs & Controls */}
