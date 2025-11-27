@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Download, Loader2, Link as LinkIcon, Check, Trash2, Folder, MoveRight, Eye, MoreVertical } from 'lucide-react';
 import { FileIcon, defaultStyles } from 'react-file-icon';
 import { TelegramMessage, AppConfig } from '../types';
@@ -128,6 +128,39 @@ export const FileCard: React.FC<FileCardProps> = ({
   if (folderStats.files > 0) folderInfo.push(`${folderStats.files} file${folderStats.files !== 1 ? 's' : ''}`);
   const folderInfoStr = folderInfo.length > 0 ? folderInfo.join(', ') : 'Empty';
 
+  const [showDot, setShowDot] = useState(true);
+  const metaContainerRef = useRef<HTMLDivElement>(null);
+
+  // 检测是否换行
+  useEffect(() => {
+    const checkWrap = () => {
+      if (metaContainerRef.current && !isFolder) {
+        const children = Array.from(metaContainerRef.current.children);
+        if (children.length >= 2) {
+          const firstChild = children[0] as HTMLElement;
+          const lastChild = children[children.length - 1] as HTMLElement;
+          const firstTop = firstChild.getBoundingClientRect().top;
+          const lastTop = lastChild.getBoundingClientRect().top;
+          // 如果 top 位置差异超过 5px，说明换行了
+          setShowDot(Math.abs(firstTop - lastTop) < 5);
+        }
+      }
+    };
+    
+    checkWrap();
+    window.addEventListener('resize', checkWrap);
+    // 使用 ResizeObserver 监听容器大小变化
+    const resizeObserver = new ResizeObserver(checkWrap);
+    if (metaContainerRef.current) {
+      resizeObserver.observe(metaContainerRef.current);
+    }
+    
+    return () => {
+      window.removeEventListener('resize', checkWrap);
+      resizeObserver.disconnect();
+    };
+  }, [isFolder, fileName, fileSize]);
+
   return (
     <div 
         className={`bg-white rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200 group p-4 flex items-center justify-between relative ${isFolder ? 'cursor-pointer hover:bg-slate-50' : ''}`}
@@ -154,14 +187,21 @@ export const FileCard: React.FC<FileCardProps> = ({
         </div>
         
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-slate-900 truncate pr-2" title={fileName}>
+          <h3 className="text-sm font-medium text-slate-900 pr-2" title={fileName}>
             {fileName}
           </h3>
-          <div className="flex items-center gap-2 mt-1 min-w-0 text-xs text-slate-500">
-            {isFolder && <span className="truncate">{folderInfoStr}</span>}
-            {!isFolder && <span className="whitespace-nowrap">{formatBytes(fileSize || 0)}</span>}
-            {!isFolder && <span className="w-1 h-1 rounded-full bg-slate-300 shrink-0"></span>}
-                <span className="text-slate-400 truncate">{dateStr}</span>
+          <div ref={metaContainerRef} className="flex flex-wrap items-center gap-2 mt-1 min-w-0 text-xs text-slate-500 overflow-hidden">
+            {isFolder ? (
+                <span className="whitespace-nowrap">{folderInfoStr}</span>
+            ) : (
+                <span className="whitespace-nowrap">{formatBytes(fileSize || 0)}</span>
+            )}
+
+            {!isFolder && (
+              <span className={`w-1 h-1 rounded-full bg-slate-300 shrink-0 ${showDot ? 'visible' : 'invisible'}`}></span>
+            )}
+            
+            <span className="text-slate-400 whitespace-nowrap">{dateStr}</span>
           </div>
         </div>
       </div>
