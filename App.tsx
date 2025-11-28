@@ -43,7 +43,7 @@ const PendingFileItem = ({
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const isPreviewable = isFilePreviewable(file.name, file.type);
+  const isPreviewable = isFilePreviewable(file.name, file.type).ok;
 
   useEffect(() => {
     // Create preview for supported media types
