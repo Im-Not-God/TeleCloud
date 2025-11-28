@@ -1,4 +1,3 @@
-
 import { AppConfig, TelegramUpdate, TelegramMessage, WorkerResponse, FolderItem } from '../types';
 
 // Helper to call our Worker API
@@ -73,6 +72,15 @@ export const getStoredFiles = async (config: AppConfig, parentId: number | null 
   } catch (error) {
     console.error("Failed to fetch files from Worker", error);
     throw error;
+  }
+};
+
+export const searchFiles = async (config: AppConfig, query: string): Promise<TelegramUpdate[]> => {
+  try {
+    return await callWorker<TelegramUpdate[]>(config, `/search?q=${encodeURIComponent(query)}`);
+  } catch (error) {
+    console.error("Search failed", error);
+    return [];
   }
 };
 

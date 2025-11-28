@@ -1,4 +1,3 @@
-
 /**
  * Cloudflare Worker for TeleCloud
  * Handles Telegram Proxying and D1 Database Persistence
@@ -47,6 +46,10 @@ export default {
       if (path === '/files' && request.method === 'GET') {
         const parentId = url.searchParams.get('parent_id');
         return await handleListFiles(env.DB, parentId);
+      }
+      if (path === '/search' && request.method === 'GET') {
+        const query = url.searchParams.get('q');
+        return await handleSearchFiles(env.DB, query);
       }
       if (path === '/folders' && request.method === 'GET') {
         return await handleListFolders(env.DB);
@@ -200,38 +203,73 @@ async function handleListFiles(db, parentId) {
   const { results } = await db.prepare(query).bind(...params).all();
 
   // Map DB rows back to TelegramUpdate structure for frontend compatibility
-  const updates = results.map(row => ({
-    update_id: row.id,
-    message: {
-      message_id: row.message_id,
-      date: row.date,
-      chat: { id: 0, type: 'channel' },
-      [row.is_photo ? 'photo' : 'document']: row.is_photo ? [{
-          file_id: row.file_id,
-          file_unique_id: row.file_unique_id,
-          file_size: row.file_size,
-          width: 0, height: 0
-      }] : {
-          file_id: row.file_id, // For folders this might be null or unique ID
-          file_unique_id: row.file_unique_id,
-          file_name: row.file_name,
-          mime_type: row.mime_type,
-          file_size: row.file_size,
-          parent_id: row.parent_id,
-          is_folder: !!row.is_folder,
-          stats: row.is_folder ? {
-            files: row.child_files || 0,
-            folders: row.child_folders || 0
-          } : undefined
-      },
-      // Keep structure compatible if needed
-      is_duplicate: false
-    }
-  }));
+  const updates = results.map(row => mapRowToUpdate(row));
 
   return new Response(JSON.stringify({ ok: true, result: updates }), {
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
   });
+}
+
+async function handleSearchFiles(db, query) {
+  if (!db) throw new Error("Database not configured");
+  if (!query || query.trim() === '') {
+      return new Response(JSON.stringify({ ok: true, result: [] }), {
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+      });
+  }
+
+  const searchQuery = `%${query.trim()}%`;
+  
+  // Search across all files for this chat_id
+  const sql = `
+    SELECT 
+      f.*,
+      SUM(CASE WHEN c.is_folder = 0 THEN 1 ELSE 0 END) AS child_files,
+      SUM(CASE WHEN c.is_folder = 1 THEN 1 ELSE 0 END) AS child_folders
+    FROM files f
+    LEFT JOIN files c ON c.parent_id = f.id
+    WHERE f.chat_id = ? AND f.file_name LIKE ?
+    GROUP BY f.id
+    ORDER BY f.is_folder DESC, f.date DESC
+    LIMIT 50
+  `;
+  
+  const { results } = await db.prepare(sql).bind(HEADER_CHAT_ID, searchQuery).all();
+  const updates = results.map(row => mapRowToUpdate(row));
+
+  return new Response(JSON.stringify({ ok: true, result: updates }), {
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+  });
+}
+
+function mapRowToUpdate(row) {
+    return {
+        update_id: row.id,
+        message: {
+          message_id: row.message_id,
+          date: row.date,
+          chat: { id: 0, type: 'channel' },
+          [row.is_photo ? 'photo' : 'document']: row.is_photo ? [{
+              file_id: row.file_id,
+              file_unique_id: row.file_unique_id,
+              file_size: row.file_size,
+              width: 0, height: 0
+          }] : {
+              file_id: row.file_id,
+              file_unique_id: row.file_unique_id,
+              file_name: row.file_name,
+              mime_type: row.mime_type,
+              file_size: row.file_size,
+              parent_id: row.parent_id,
+              is_folder: !!row.is_folder,
+              stats: row.is_folder ? {
+                files: row.child_files || 0,
+                folders: row.child_folders || 0
+              } : undefined
+          },
+          is_duplicate: false
+        }
+    };
 }
 
 async function handleListFolders(db) {
