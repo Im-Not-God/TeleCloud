@@ -1,4 +1,4 @@
-import { AppConfig, TelegramUpdate, TelegramMessage, WorkerResponse, FolderItem } from '../types';
+import { AppConfig, TelegramUpdate, TelegramMessage, WorkerResponse, FolderItem, SortConfig } from '../types';
 
 // Helper to call our Worker API
 const callWorker = async <T>(
@@ -65,10 +65,23 @@ export const saveBackendConfig = async (config: AppConfig): Promise<void> => {
   }
 };
 
-export const getStoredFiles = async (config: AppConfig, parentId: number | null = null): Promise<TelegramUpdate[]> => {
+export const getStoredFiles = async (config: AppConfig, parentId: number | null = null, sort?: SortConfig): Promise<TelegramUpdate[]> => {
   try {
-    const endpoint = parentId ? `/files?parent_id=${parentId}` : `/files`;
-    return await callWorker<TelegramUpdate[]>(config, endpoint);
+    const endpoint = `/files`;
+
+    // Build URL with params
+    const params = new URLSearchParams();
+    if (parentId) params.append('parent_id', parentId.toString());
+    
+    if (sort) {
+        params.append('sort_by', sort.field);
+        params.append('order', sort.order);
+    }
+    
+    const queryString = params.toString();
+    const fullEndpoint = queryString ? `${endpoint}?${queryString}` : endpoint;
+
+    return await callWorker<TelegramUpdate[]>(config, fullEndpoint);
   } catch (error) {
     console.error("Failed to fetch files from Worker", error);
     throw error;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, UploadCloud, RefreshCw, Shield, HardDrive, Import, Database, FolderPlus, Home, ChevronRight, Info, FileText, CheckCircle2, AlertCircle, X, Trash2, Plus, Eye, Moon, Sun, Search } from 'lucide-react';
+import { Settings, UploadCloud, RefreshCw, Shield, HardDrive, Import, Database, FolderPlus, Home, ChevronRight, Info, FileText, CheckCircle2, AlertCircle, X, Trash2, Plus, Eye, Moon, Sun, Search, ListFilter, ArrowDownNarrowWide, ArrowUpNarrowWide, Check } from 'lucide-react';
 import { FileIcon, defaultStyles } from 'react-file-icon';
-import { AppConfig, TelegramUpdate, DEFAULT_WORKER_URL } from './types';
+import { AppConfig, TelegramUpdate, DEFAULT_WORKER_URL, SortConfig, SortField, SortOrder } from './types';
 import { formatBytes, isFilePreviewable } from './constants';
 import { SettingsModal } from './components/SettingsModal';
 import { UploadSuccessModal } from './components/UploadSuccessModal';
@@ -186,6 +186,10 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   
+  // Sort State
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'date', order: 'desc' });
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+
   // Upload State
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -225,7 +229,10 @@ function App() {
 
   // Close menus when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => setActiveMenuId(null);
+    const handleClickOutside = () => {
+        setActiveMenuId(null);
+        setIsSortMenuOpen(false);
+    };
     window.addEventListener('click', handleClickOutside);
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
@@ -249,7 +256,7 @@ function App() {
     setIsLoading(true);
     setError(null);
     try {
-        const dbFiles = await getStoredFiles(config, currentFolderId);
+        const dbFiles = await getStoredFiles(config, currentFolderId, sortConfig);
         setFiles(dbFiles);
     } catch (err: any) {
       console.error(err);
@@ -260,7 +267,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [config, currentFolderId, searchQuery]);
+  }, [config, currentFolderId, searchQuery, sortConfig]);
 
   // Refresh when config or folder changes
   useEffect(() => {
@@ -607,6 +614,12 @@ function App() {
       }
   };
 
+  const handleSortChange = (field: SortField, order: SortOrder) => {
+      setSortConfig({ field, order });
+      setIsSortMenuOpen(false);
+      // Fetch will automatically trigger due to dependency array
+  };
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
       {/* Header */}
@@ -739,6 +752,7 @@ function App() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
             >
+                {/* ... Upload UI content from previous step ... */}
                 <div className="absolute -inset-1 bg-gradient-to-r from-telegram-500 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
                 <div className="relative bg-white dark:bg-slate-800 rounded-xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm text-center space-y-4">
                 
@@ -920,19 +934,71 @@ function App() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                <button
-                    onClick={() => setIsCreateFolderOpen(true)}
-                    disabled={!config.workerUrl}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-telegram-600 dark:hover:text-telegram-400 hover:border-telegram-200 dark:hover:border-telegram-700 rounded-lg text-sm font-medium transition-all shadow-sm"
-                >
-                    <FolderPlus className="w-4 h-4" />
-                    <span>New Folder</span>
-                </button>
-                <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
-                <div className="flex items-center gap-3 text-slate-400 dark:text-slate-500">
-                        <Database className="w-4 h-4" />
-                        <span className="text-xs font-medium">{files.length} items</span>
-                </div>
+                    {/* Sort Dropdown */}
+                    <div className="relative">
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsSortMenuOpen(!isSortMenuOpen);
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-telegram-600 dark:hover:text-telegram-400 hover:border-telegram-200 dark:hover:border-telegram-700 rounded-lg text-sm font-medium transition-all shadow-sm"
+                        >
+                            {sortConfig.order === 'asc' ? <ArrowUpNarrowWide className="w-4 h-4" /> : <ArrowDownNarrowWide className="w-4 h-4" />}
+                            <span className="hidden min-[480px]:inline">Sort</span>
+                        </button>
+                        
+                        {isSortMenuOpen && (
+                            <div 
+                                className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-30 py-1 animate-in fade-in zoom-in-95 duration-100 origin-top-right"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Sort By</div>
+                                
+                                {(['name', 'date', 'size'] as SortField[]).map(field => (
+                                    <button
+                                        key={field}
+                                        onClick={() => handleSortChange(field, sortConfig.order)}
+                                        className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between capitalize"
+                                    >
+                                        {field}
+                                        {sortConfig.field === field && <Check className="w-4 h-4 text-telegram-500" />}
+                                    </button>
+                                ))}
+                                
+                                <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
+                                <div className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Order</div>
+
+                                <button
+                                    onClick={() => handleSortChange(sortConfig.field, 'asc')}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between"
+                                >
+                                    Ascending
+                                    {sortConfig.order === 'asc' && <Check className="w-4 h-4 text-telegram-500" />}
+                                </button>
+                                <button
+                                    onClick={() => handleSortChange(sortConfig.field, 'desc')}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between"
+                                >
+                                    Descending
+                                    {sortConfig.order === 'desc' && <Check className="w-4 h-4 text-telegram-500" />}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={() => setIsCreateFolderOpen(true)}
+                        disabled={!config.workerUrl}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-telegram-600 dark:hover:text-telegram-400 hover:border-telegram-200 dark:hover:border-telegram-700 rounded-lg text-sm font-medium transition-all shadow-sm"
+                    >
+                        <FolderPlus className="w-4 h-4" />
+                        <span className="hidden min-[480px]:inline">New Folder</span>
+                    </button>
+                    <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
+                    <div className="flex items-center gap-3 text-slate-400 dark:text-slate-500">
+                            <Database className="w-4 h-4" />
+                            <span className="text-xs font-medium">{files.length} items</span>
+                    </div>
                 </div>
             </div>
           )}

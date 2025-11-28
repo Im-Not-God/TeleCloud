@@ -1,4 +1,3 @@
-
 export interface TelegramUser {
   id: number;
   is_bot: boolean;
@@ -65,6 +64,14 @@ export interface FolderItem {
     id: number;
     name: string;
     parent_id: number | null;
+}
+
+export type SortField = 'name' | 'date' | 'size';
+export type SortOrder = 'asc' | 'desc';
+
+export interface SortConfig {
+    field: SortField;
+    order: SortOrder;
 }
 
 export const DEFAULT_WORKER_URL = "/api"; // Assumes frontend and backend are on same domain

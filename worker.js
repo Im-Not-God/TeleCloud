@@ -45,7 +45,9 @@ export default {
       }
       if (path === '/files' && request.method === 'GET') {
         const parentId = url.searchParams.get('parent_id');
-        return await handleListFiles(env.DB, parentId);
+        const sortBy = url.searchParams.get('sort_by');
+        const order = url.searchParams.get('order');
+        return await handleListFiles(env.DB, parentId, sortBy, order);
       }
       if (path === '/search' && request.method === 'GET') {
         const query = url.searchParams.get('q');
@@ -179,10 +181,25 @@ async function handleGetMe(token) {
   });
 }
 
-async function handleListFiles(db, parentId) {
+async function handleListFiles(db, parentId, sortBy = 'date', order = 'desc') {
   if (!db) throw new Error("Database not configured");
   
   const isRoot = !parentId || parentId === "null" || parentId === "root";
+
+  // Whitelist sort fields to prevent SQL injection
+  const validSorts = {
+    'name': 'f.file_name',
+    'date': 'f.date',
+    'size': 'f.file_size'
+  };
+  const validOrders = ['asc', 'desc'];
+
+  const sortCol = validSorts[sortBy] || 'f.date';
+  const sortOrder = validOrders.includes(order) ? order.toUpperCase() : 'DESC';
+  
+  // Always sort folders first (is_folder DESC means 1 first)
+  const orderByClause = `ORDER BY f.is_folder DESC, ${sortCol} ${sortOrder}`;
+
   // We perform a LEFT JOIN on the files table (aliased as 'c' for children) to count contents of folders
   // We group by 'f' (the file/folder in current directory)
   let query = `
@@ -195,7 +212,7 @@ async function handleListFiles(db, parentId) {
     WHERE f.chat_id = ?
       ${isRoot ? "AND f.parent_id IS NULL" : "AND f.parent_id = ?"}
     GROUP BY f.id
-    ORDER BY f.is_folder DESC, f.date DESC
+    ${orderByClause}
   `;
   
   let params = isRoot ? [HEADER_CHAT_ID] : [parseInt(HEADER_CHAT_ID), parseInt(parentId)];
