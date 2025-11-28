@@ -38,7 +38,7 @@ export const FileCard: React.FC<FileCardProps> = ({
   const actionId = fileId || uniqueId; 
 
   // Updated to include text types
-  const isPreviewable = !isFolder && fileId && isFilePreviewable(fileName, mimeType);
+  const isPreviewable = !isFolder && fileId && isFilePreviewable(fileName, mimeType).ok;
 
   // Helper to extract extension
   const getExtension = (name: string) => {

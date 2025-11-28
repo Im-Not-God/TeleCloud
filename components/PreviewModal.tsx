@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Download, FileText } from 'lucide-react';
+import { isFilePreviewable } from '../constants';
+import { PrismAsyncLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus, coy } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import hljs from "highlight.js";
+import languageMap from 'language-map';
 
 interface PreviewModalProps {
   isOpen: boolean;
@@ -10,80 +15,139 @@ interface PreviewModalProps {
 }
 
 export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, url, fileName, mimeType }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [textContent, setTextContent] = useState<string | null>(null);
+   const [isLoading, setIsLoading] = useState(true);
+   const [textContent, setTextContent] = useState<string | null>(null);
+   const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
 
-  // Determine file type category
-  const isVideo = mimeType.startsWith('video/');
-  const isImage = mimeType.startsWith('image/');
-  const isAudio = mimeType.startsWith('audio/');
-  const isPdf = mimeType.includes('pdf');
+   // Listen for dark mode changes
+   useEffect(() => {
+      const observer = new MutationObserver(() => {
+         setIsDark(document.documentElement.classList.contains('dark'));
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      return () => observer.disconnect();
+   }, []);
+
+   // Determine file type category
+   const _isFilePreviewable = isFilePreviewable(fileName, mimeType);
+   let isVideo = false;
+   let isImage = false;
+   let isAudio = false;
+   let isPdf = false;
+   let isText = false;
   
-  // Check for text/code types
-  const isText = 
-    mimeType.startsWith('text/') || 
-    mimeType.includes('json') || 
-    mimeType.includes('xml') || 
-    mimeType.includes('javascript') ||
-    /\.(txt|json|md|xml|js|ts|css|html|log|sql|ini|conf)$/i.test(fileName);
+   switch(_isFilePreviewable.type){
+      case "video": isVideo = true; break;
+      case "image": isImage = true; break;
+      case "audio": isAudio = true; break;
+      case "pdf": isPdf = true; break;
+      case "text": isText = true; break;
+   }
 
-  useEffect(() => {
-    if (isOpen) {
-        setIsLoading(true);
-        setTextContent(null);
-        
-        if (isText) {
-            // Fetch text content
-            fetch(url)
-                .then(res => {
-                    if (!res.ok) throw new Error("Failed to load text");
-                    return res.text();
-                })
-                .then(text => {
-                    // Limit preview size to avoid browser crash on huge logs
-                    if (text.length > 500000) {
-                        setTextContent(text.substring(0, 500000) + "\n\n...[File truncated for preview]...");
-                    } else {
-                        setTextContent(text);
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    setTextContent("Error loading file content.");
-                })
-                .finally(() => setIsLoading(false));
-        } else {
-            // For non-text files, set a timeout to hide loader if content takes too long
-            const timeout = setTimeout(() => setIsLoading(false), 100);
-            return () => clearTimeout(timeout);
-        }
-    }
-  }, [isOpen, url, isText]);
+   // Determine Language for Syntax Highlighting
+   const getLanguage = (name: string) => {
+      const ext = name.split('.').pop()?.toLowerCase();
+      let candidates: string[] = [];
 
-  // Close on Escape key
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, onClose]);
+      if (ext) {
+         candidates = [...new Set(Object.entries(languageMap)
+            .filter(([_, info]) => info.extensions?.includes("." + ext))
+            .flatMap(([lang, info]) => {
+               const base = [lang.toLowerCase()];
+               const aliases = (info.aliases || []).map(a => a.toLowerCase());
+               return [...base, ...aliases];
+            }))];
+            // // .map(([lang]) => lang.toLowerCase());
+            // return [...new Set(matches)]; // 去重
+      }
+      // if (ext && extAliasMap[ext]) {
+      //    candidates = extAliasMap[ext]; // linguist 自动处理扩展名 + alias
+      //    console.log('candi:',candidates);
+      // }
+      console.log('candi:',candidates);
 
-  if (!isOpen) return null;
 
-  const handleLoad = () => setIsLoading(false);
-  
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
+      // 自动检测（带候选语言）
+      const result = candidates.length
+         ? hljs.highlightAuto(textContent,candidates).language
+         : hljs.highlightAuto(textContent).language;
+      
+      console.log("lang: ", result);
+
+      // Prism supportedLanguages
+      const prismSupported = SyntaxHighlighter.supportedLanguages;
+      if (prismSupported.includes(result)) {
+         return result;
+      }
+      
+      const aliases: { [key: string]: string } = {
+         'c#': 'csharp'
+      };
+      return aliases[result || ''] || result || 'text';
+   };
+
+   useEffect(() => {
+      if (!isOpen || !isText) {
+         if (!isText && !isImage && isOpen) {
+            setTimeout(() => setIsLoading(false), 100);
+         }
+         return;
+      }
+
+      setIsLoading(true);
+      setTextContent(null);
+
+      const abortController = new AbortController();
+      
+      // Fetch text content
+      fetch(url, { signal: abortController.signal })
+         .then(res => {
+            if (!res.ok) throw new Error("Failed to load text");
+            return res.text();
+         })
+         .then(text => {
+            // Limit preview size to avoid browser crash on huge logs
+            if (text.length > 500000) {
+               setTextContent(text.substring(0, 500000) + "\n\n...[File truncated for preview]...");
+            } else {
+               setTextContent(text);
+            }
+         })
+         .catch(err => {
+            if(err.name !== 'AbortError'){
+               console.error(err);
+               setTextContent("Error loading file content.");
+            }
+         })
+         .finally(() => setIsLoading(false));
+      
+      return () => abortController.abort();
+   }, [isOpen, url, isText]);
+
+   // Close on Escape key
+   useEffect(() => {
+      const handleEscape = (e: KeyboardEvent) => {
+         if (e.key === 'Escape') onClose();
+      };
+      if (isOpen) {
+         document.addEventListener('keydown', handleEscape);
+         document.body.style.overflow = 'hidden';
+      }
+      return () => {
+         document.removeEventListener('keydown', handleEscape);
+         document.body.style.overflow = '';
+      };
+   }, [isOpen, onClose]);
+
+   if (!isOpen) return null;
+
+   const handleLoad = () => setIsLoading(false);
+   
+   const handleBackdropClick = (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) {
+         onClose();
+      }
+   };
 
   return (
     <div 
@@ -120,7 +184,7 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, url
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex items-center justify-center overflow-hidden rounded-lg relative bg-black mt-16">
+        <div className="flex-1 flex items-center justify-center overflow-hidden rounded-lg relative bg-black mt-16 shadow-2xl">
            {/* Loading overlay - lower z-index than header */}
            {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center text-white/50 z-10 bg-black/50 backdrop-blur-sm">
@@ -183,17 +247,29 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, url
 
            {isText && (
                <div className="w-full h-full bg-slate-50 dark:bg-slate-900 overflow-auto">
-                   <div className="p-6 sm:p-8">
-                       {textContent !== null ? (
-                           <pre className="font-mono text-xs sm:text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
-                               {textContent}
-                           </pre>
-                       ) : (
-                           <div className="h-96 flex items-center justify-center">
-                               <Loader2 className="w-8 h-8 animate-spin text-slate-400 dark:text-slate-600" />
-                           </div>
-                       )}
-                   </div>
+                  {textContent !== null ? (
+                     <div className="h-full text-sm">
+                        <SyntaxHighlighter
+                           language={getLanguage(fileName)}
+                           style={isDark ? vscDarkPlus : coy}
+                           customStyle={{ 
+                              margin: 0, 
+                              height: '100%', 
+                              borderRadius: 0, 
+                              fontSize: '0.875rem',
+                              backgroundColor: 'transparent' // Let container bg shine through or usage theme bg
+                           }}
+                           wrapLongLines={true}
+                           showLineNumbers={true}
+                        >
+                              {textContent}
+                        </SyntaxHighlighter>
+                     </div>
+                  ) : (
+                     <div className="h-96 flex items-center justify-center">
+                        <Loader2 className="w-8 h-8 animate-spin text-slate-400 dark:text-slate-600" />
+                     </div>
+                  )}
                </div>
            )}
 
