@@ -3,6 +3,8 @@ import ReactHtmlParser from 'html-react-parser';
 
 export const TELEGRAM_API_BASE = "https://api.telegram.org";
 
+export const CHUNK_SIZE = 20 * 1024 * 1024; // 20mb
+
 export const formatBytes = (bytes: number, decimals = 2) => {
   if (!+bytes) return '0 Bytes';
   const k = 1024;
@@ -133,7 +135,10 @@ export const translations = {
     search_failed: "Search failed.",
     fetch_failed: "Failed to fetch files. Ensure Worker is deployed and configured.",
     msg_older_than_48h: "This message is older than 48 hours and must be deleted manually: ",
-    skipped_large_files: "Skipped __count__ files larger than 50MB."
+    skipped_large_files: "Skipped __count__ files larger than 50MB.",
+    chunks: "chunks",
+    chunks_detail: "Chunks",
+    slicing_message: "Auto-sliced large files: __msg__"
   },
   zh: {
     app_title: "TeleCloud",
@@ -219,7 +224,10 @@ export const translations = {
     search_failed: "搜索失败。",
     fetch_failed: "获取文件失败。请确保 Worker 已部署并配置。",
     msg_older_than_48h: "此消息已超过 48 小时，必须手动删除：",
-    skipped_large_files: "已跳过 __count__ 个大于 50MB 的文件。"
+    skipped_large_files: "已跳过 __count__ 个大于 50MB 的文件。",
+    chunks: "分块",
+    chunks_detail: "分块详情",
+    slicing_message: "自动切割大文件: __msg__"
   }
 };
 

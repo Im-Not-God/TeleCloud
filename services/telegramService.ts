@@ -139,13 +139,17 @@ export const uploadDocument = (
   config: AppConfig,
   file: File,
   onProgress: (loaded: number, total: number) => void,
-  parentId: number | null = null
+  parentId: number | null = null,
+  sliceGroupId: string | null = null,
 ): Promise<TelegramMessage> => {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
     formData.append('document', file);
     if (parentId) {
         formData.append('parent_id', parentId.toString());
+    }
+    if (sliceGroupId) {
+        formData.append('slice_group_id', sliceGroupId);
     }
 
     const xhr = new XMLHttpRequest();
@@ -211,3 +215,63 @@ export const deleteFile = async (config: AppConfig, fileId: string): Promise<{ o
         return { ok: false, error: e };
     }
 }
+
+/**
+ * Downloads a file from Telegram via the Worker proxy
+ */
+export const downloadFile = async (
+  config: AppConfig,
+  fileId: string,
+  fileName: string,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<Blob> => {
+  const url = getFileDownloadUrl(config, fileId, fileName);
+
+  const response = await fetch(url, {
+    headers: {
+      'X-Bot-Token': config.botToken,
+      'X-Chat-Id': config.chatId,
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`);
+  }
+
+  return await response.blob();
+};
+
+/**
+ * Downloads and reassembles a complete chunk group
+ * Handles multiple chunk downloads in parallel and merges them
+ */
+export const downloadAndReassembleChunks = async (
+  config: AppConfig,
+  chunks: Array<{ file_id: string; name: string; index?: number }>,
+  originalFileName: string,
+  onProgress?: (downloaded: number, total: number) => void
+): Promise<Blob> => {
+  // Sort chunks by index if available
+  const sortedChunks = [...chunks].sort((a, b) => 
+    (a.index || 0) - (b.index || 0)
+  );
+
+  const totalChunks = sortedChunks.length;
+  let downloadedCount = 0;
+
+  // Download all chunks in parallel
+  const downloadPromises = sortedChunks.map((chunk) =>
+    downloadFile(config, chunk.file_id, chunk.name).then((blob) => {
+      downloadedCount++;
+      if (onProgress) {
+        onProgress(downloadedCount, totalChunks);
+      }
+      return blob;
+    })
+  );
+
+  const blobs = await Promise.all(downloadPromises);
+
+  // Merge all blobs in correct order
+  return new Blob(blobs);
+};

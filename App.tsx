@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, UploadCloud, RefreshCw, Shield, HardDrive, Import, Database, FolderPlus, Home, ChevronRight, Info, FileText, CheckCircle2, AlertCircle, X, Trash2, Plus, Eye, Moon, Sun, Search, ListFilter, ArrowDownNarrowWide, ArrowUpNarrowWide, Check, Globe } from 'lucide-react';
+import { Settings, UploadCloud, RefreshCw, Shield, HardDrive, Import, Database, FolderPlus, Home, ChevronRight, Info, FileText, CheckCircle2, AlertCircle, X, Trash2, Plus, Eye, Moon, Sun, Search, ListFilter, ArrowDownNarrowWide, ArrowUpNarrowWide, Check, Globe, ChevronDown, Layers } from 'lucide-react';
 import { FileIcon, defaultStyles } from 'react-file-icon';
 import { AppConfig, TelegramUpdate, DEFAULT_WORKER_URL, SortConfig, SortField, SortOrder } from './types';
-import { formatBytes, isFilePreviewable, t } from './constants';
+import { CHUNK_SIZE, formatBytes, isFilePreviewable, t } from './constants';
 import { SettingsModal } from './components/SettingsModal';
 import { UploadSuccessModal } from './components/UploadSuccessModal';
 import { ImportModal } from './components/ImportModal';
@@ -11,6 +11,8 @@ import { CreateFolderModal } from './components/CreateFolderModal';
 import { MoveFileModal } from './components/MoveFileModal';
 import { PreviewModal } from './components/PreviewModal';
 import { getStoredFiles, uploadDocument, getFileDownloadUrl, deleteFile, createFolder, moveFile, searchFiles } from './services/telegramService';
+import { processFilesWithSlicing, getSliceFileMetaData } from './services/fileSliceService';
+import { groupFileChunks, isChunkGroupComplete, getChunkGroupInfo } from './services/fileReassemblyService';
 import { FileCard } from './components/FileCard';
 
 const CONFIG_STORAGE_KEY = 'telecloud_config_v2';
@@ -44,6 +46,11 @@ const PendingFileItem = ({
   lang?: string
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Check if this file will be sliced
+  const willBeSliced = file.size > CHUNK_SIZE;
+  const totalChunks = willBeSliced ? Math.ceil(file.size / CHUNK_SIZE) : 0;
 
   const isPreviewable = isFilePreviewable(file.name, file.type).ok;
 
@@ -94,6 +101,111 @@ const PendingFileItem = ({
     );
   };
 
+  if (willBeSliced) {
+    // Sliced file - show with expand/collapse
+    return (
+      <div className="space-y-2">
+        {/* Main item - always visible */}
+        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border border-orange-200 dark:border-orange-700/50 rounded-lg hover:border-orange-300 dark:hover:border-orange-600 transition-all">
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Orange split badge */}
+            {/* <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-300/40 dark:border-orange-600/40 flex items-center justify-center flex-shrink-0">
+              <Layers className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+            </div> */}
+            <div 
+              onClick={previewUrl ? handlePreviewClick : undefined}
+              className={`w-12 h-12 rounded-lg bg-white dark:bg-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600 overflow-hidden shrink-0 relative group/thumb ${previewUrl ? 'cursor-pointer' : ''}`}
+            >
+              {renderThumbnail()}
+              
+              {/* Overlay Eye Icon for previewable items */}
+              {previewUrl && (
+                  <div className="absolute inset-0 bg-black/10 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                      <div className="bg-white/90 dark:bg-slate-800/90 rounded-full p-1 shadow-sm">
+                          <Eye className="w-3 h-3 text-telegram-600 dark:text-telegram-400" />
+                      </div>
+                  </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white truncate" title={file.name}>{file.name}</p>
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                <span className="inline-flex items-center gap-1 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded text-[11px] font-medium">
+                  📦 {totalChunks} parts
+                </span>
+                <span>{formatBytes(file.size)}</span>
+                {previewUrl && (
+                  <button 
+                      onClick={handlePreviewClick}
+                      className="text-telegram-600 dark:text-telegram-400 bg-telegram-50 dark:bg-telegram-900/30 hover:bg-telegram-100 dark:hover:bg-telegram-900/50 px-1.5 rounded text-[10px] font-medium transition-colors flex items-center gap-1"
+                  >
+                      <Eye className="w-3 h-3" />
+                      {t(lang, 'preview')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Expand button + Upload + Remove */}
+          <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+            <button 
+              onClick={() => setIsExpanded(!isExpanded)}
+              className={`p-1.5 rounded-lg transition-all ${isExpanded ? 'bg-orange-100 dark:bg-orange-900/40' : 'bg-slate-100 dark:bg-slate-700'}`}
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'text-orange-600 dark:text-orange-400 rotate-180' : 'text-slate-400'}`} />
+            </button>
+            <button 
+              onClick={onUpload}
+              className="p-2 text-slate-400 hover:text-telegram-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
+              title="Upload this file"
+            >
+              <UploadCloud className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={onRemove}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
+              title="Remove from list"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded chunks list */}
+        {isExpanded && (
+          <div className="pl-4 border-l-2 border-orange-300 dark:border-orange-700 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide px-2">
+              {t(lang, "chunks")} ({totalChunks})
+            </div>
+            {Array.from({ length: totalChunks }).map((_, idx) => {
+              const start = idx * CHUNK_SIZE;
+              const end = Math.min(start + CHUNK_SIZE, file.size);
+              const chunkSize = end - start;
+              return (
+                <div
+                  key={idx}
+                  className="flex items-center gap-3 p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg text-xs"
+                >
+                  <div className="w-6 h-6 rounded flex items-center justify-center bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-medium text-[10px]">
+                    {idx + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-700 dark:text-slate-200 truncate">
+                      {file.name}.part{idx + 1}of{totalChunks}
+                    </p>
+                    <p className="text-slate-500 dark:text-slate-400">{formatBytes(chunkSize)}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Non-sliced file - render normally
   return (
     <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg group/item hover:border-telegram-200 dark:hover:border-telegram-700 hover:shadow-sm transition-all">
         <div className="flex items-center gap-3 min-w-0">
@@ -213,9 +325,10 @@ function App() {
   const lastLoadedBytesRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
 
-  const [error, setError] = useState<{
+  const [notification, setNotification] = useState<{
     type: string,
-    message: string,
+    messageKey?: string;  // translation key
+    message?: string;      // raw message (fallback)
     links?: string[];
     linkOptions?: {
       linkText?: string;
@@ -223,6 +336,12 @@ function App() {
       icon?: string;
     }
   } | null>(null);
+  const notificationStyles = {
+    info: "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300",
+    warning: "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300",
+    error: "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
+  };
+
   const [uploadedResults, setUploadedResults] = useState<{url: string, name: string}[]>([]);
   
   // Action states
@@ -263,25 +382,29 @@ function App() {
     if (searchQuery.trim() !== '') return;
 
     setIsLoading(true);
-    setError(null);
+    setNotification(null);
+    
     try {
         const dbFiles = await getStoredFiles(config, currentFolderId, sortConfig);
         setFiles(dbFiles);
+        setNotification({
+        type: "error",
+        messageKey: 'fetch_failed'
+      });
     } catch (err: any) {
       console.error(err);
-      setError({
+      setNotification({
         type: "error",
-        message: t(lang, 'fetch_failed')
+        messageKey: 'fetch_failed'
       });
     } finally {
       setIsLoading(false);
     }
-  }, [config.botToken, config.chatId, config.workerUrl, currentFolderId, searchQuery, sortConfig, lang]);
+  }, [config.botToken, config.chatId, config.workerUrl, currentFolderId, searchQuery, sortConfig]);
 
   // Refresh when config or folder changes
   useEffect(() => {
     if (config.botToken && config.chatId) {
-      console.log('here?');
       fetchFiles();
       setActiveMenuId(null); // Close menus on navigation
     }
@@ -298,7 +421,7 @@ function App() {
                 setFiles(results);
             } catch (e) {
                 console.error(e);
-                setError({ type: "error", message: t(lang, 'search_failed') });
+                setNotification({ type: "error", messageKey: 'search_failed' });
             } finally {
                 setIsSearching(false);
                 setIsLoading(false);
@@ -310,7 +433,7 @@ function App() {
     }, 400);
 
     return () => clearTimeout(delayDebounce);
-  }, [searchQuery, config, fetchFiles, lang]);
+  }, [searchQuery, config, fetchFiles]);
 
   // Speed Calculation & Progress Update Interval
   useEffect(() => {
@@ -327,7 +450,7 @@ function App() {
         const currentProgressMap = filesProgressRef.current;
         
         Object.values(currentProgressMap).forEach(val => {
-            currentTotalLoaded += val.loaded;
+            currentTotalLoaded += (val as any).loaded;
         });
         
         const timeDiff = (currentTime - lastTimeRef.current) / 1000; // seconds
@@ -362,40 +485,41 @@ function App() {
   }, [isUploading]);
 
   // Reusable file processor
-  const processFiles = (newFiles: File[]) => {
-      const validFiles: File[] = [];
-      let skippedCount = 0;
-
-      newFiles.forEach(f => {
-          if (f.size > 50 * 1024 * 1024) {
-              skippedCount++;
-          } else {
-              validFiles.push(f);
-          }
-      });
-
-      if (skippedCount > 0) {
-          setError({
-            type: "error",
-            message: t(lang, 'skipped_large_files').replace('__count__', skippedCount.toString())
-          });
-      } else {
-          setError(null);
-      }
-      
-      if (validFiles.length > 0) {
-          setPendingFiles(prev => {
-             // Filter duplicates against existing pending files
-             const uniqueNewFiles = validFiles.filter(nf => 
-                 !prev.some(pf => pf.name === nf.name && pf.size === nf.size && pf.lastModified === nf.lastModified)
-             );
-             return [...prev, ...uniqueNewFiles];
-          });
-      }
+  const processFiles = (files: File[]) => {
+    // Process files with slicing: files > 50MB will be automatically split
+    // const processedFiles = processFilesWithSlicing(files);
+    
+    // Check for sliced files and provide feedback (notification)
+    const slicedFiles = files.filter(f => f.size > CHUNK_SIZE);
+    let slicingMessage = '';
+    if (slicedFiles.length > 0) {
+        const sliceDetails = slicedFiles.map(f => {
+            const totalChunks = Math.ceil(f.size / (CHUNK_SIZE));
+            return `${f.name} → ${totalChunks} parts`;
+        }).join(', ');
+        
+        slicingMessage = `Auto-sliced large files: ${sliceDetails}`;
+        setNotification({
+          type: "info",
+          message: slicingMessage
+        });
+    } else {
+        setNotification(null);
+    }
+    
+    if (files.length > 0) {
+        setPendingFiles(prev => {
+            // Filter duplicates against existing pending files
+            const uniqueNewFiles = files.filter(nf => 
+                !prev.some(pf => pf.name === nf.name && pf.size === nf.size && pf.lastModified === nf.lastModified)
+            );
+            return [...prev, ...uniqueNewFiles];
+        });
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selectedFiles = Array.from(e.target.files || []);
+      const selectedFiles = Array.from(e.target.files || []) as File[];
       if (selectedFiles.length === 0) return;
       processFiles(selectedFiles);
       e.target.value = ''; // Reset input
@@ -430,7 +554,7 @@ function App() {
       setIsDragging(false);
       if (!config.botToken || isUploading) return;
       
-      const files = Array.from(e.dataTransfer.files);
+      const files = Array.from(e.dataTransfer.files) as File[];
       if (files.length > 0) processFiles(files);
   };
 
@@ -440,7 +564,7 @@ function App() {
 
   const handleClearPending = () => {
       setPendingFiles([]);
-      setError(null);
+      setNotification(null);
   };
 
   const startUploadProcess = async (filesToUpload: File[]) => {
@@ -454,9 +578,10 @@ function App() {
     const filesToKeep = pendingFiles.filter(f => !filesToUpload.includes(f));
     setPendingFiles(filesToKeep); 
 
+    let uploadItems = processFilesWithSlicing(filesToUpload);
     // Initialize UI status
-    const initialStatuses: FileUploadStatus[] = filesToUpload.map(f => ({
-        name: f.name,
+    const initialStatuses: FileUploadStatus[] = uploadItems.map(item => ({
+        name: item.file.name,
         progress: 0,
         status: 'pending'
     }));
@@ -464,22 +589,23 @@ function App() {
 
     // Reset progress tracking ref
     filesProgressRef.current = {};
-    filesToUpload.forEach((f, i) => {
-        filesProgressRef.current[i] = { loaded: 0, total: f.size };
+    uploadItems.forEach((item, i) => {
+        filesProgressRef.current[i] = { loaded: 0, total: item.file.size };
     });
 
     try {
       // Concurrent Uploads using Promise.all
-      const uploadPromises = filesToUpload.map(async (file, index) => {
+      const uploadPromises = uploadItems.map(async (item, index) => {
           try {
               const message = await uploadDocument(
                   config, 
-                  file, 
+                  item.file, 
                   (loaded, total) => {
                       // Update Ref only (UI updates via interval)
                       filesProgressRef.current[index] = { loaded, total };
                   }, 
-                  currentFolderId
+                  currentFolderId,
+                  item.sliceGroupId
               );
 
               // Mark complete in UI immediately for this file
@@ -492,7 +618,7 @@ function App() {
               const doc = message.document;
               const photo = message.photo ? message.photo[message.photo.length - 1] : null;
               const fileId = doc?.file_id || photo?.file_id;
-              const fileName = doc?.file_name || (photo ? `Photo_${message.date}.jpg` : file.name);
+              const fileName = doc?.file_name || (photo ? `Photo_${message.date}.jpg` : item.file.name);
 
               if (fileId) {
                   const downloadUrl = getFileDownloadUrl(config, fileId, fileName);
@@ -500,7 +626,7 @@ function App() {
               }
               return null;
           } catch (err: any) {
-              console.error(`Failed to upload ${file.name}`, err);
+              console.error(`Failed to upload ${item.file.name}`, err);
                setUploadStatuses(prev => {
                   const newArr = [...prev];
                   newArr[index] = { ...newArr[index], status: 'error', errorMsg: err.message };
@@ -520,16 +646,16 @@ function App() {
           }, 800);
       } else {
           if (uploadStatuses.some(s => s.status === 'error')) {
-              setError({
+              setNotification({
                 type: "error",
-                message: t(lang, 'some_uploads_failed')
+                messageKey: 'some_uploads_failed'
               });
           }
       }
       
     } catch (err: any) {
       console.error(err);
-      setError({type: "error", message: err.message || t(lang, 'upload_failed')});
+      setNotification({type: "error", message: err.message, messageKey: err.message ? undefined : 'upload_failed'});
     } finally {
       setTimeout(() => {
           setIsUploading(false);
@@ -555,11 +681,9 @@ function App() {
           } else {
             fetchFiles();
             if(success.data?.msgLinks?.length){
-              let errMsg = t(lang, 'msg_older_than_48h');
-              
-              setError({
+              setNotification({
                 type: "warning",
-                message: errMsg,
+                messageKey: 'msg_older_than_48h',
                 links: success.data.msgLinks,
                 linkOptions: {
                   showIcon: true,
@@ -569,11 +693,11 @@ function App() {
             }
           }
       } else {
-          setError({type: "error", message: t(lang, 'delete_failed')});
+          setNotification({type: "error", messageKey: 'delete_failed'});
       }
     } catch (err) {
       console.error(err);
-      setError({type: "error", message: t(lang, 'delete_error')});
+      setNotification({type: "error", messageKey: 'delete_error'});
     } finally {
       setIsDeleting(false);
       setFileToDelete(null);
@@ -585,7 +709,7 @@ function App() {
           await createFolder(config, name, currentFolderId);
           fetchFiles();
       } catch (e) {
-          setError({type: "error", message: t(lang, 'create_folder_failed')});
+          setNotification({type: "error", messageKey: 'create_folder_failed'});
       }
   };
 
@@ -618,7 +742,7 @@ function App() {
              fetchFiles();
           }
       } catch (e) {
-          setError({type: "error", message: t(lang, 'move_file_failed')});
+          setNotification({type: "error", messageKey: 'move_file_failed'});
       } finally {
           setFileToMove(null);
       }
@@ -652,7 +776,7 @@ function App() {
             </div>
             
             {/* Mobile Actions Right */}
-            <div className="flex items-center gap-3 sm:hidden">
+            <div className="flex items-center gap-2 sm:hidden">
                 {/* Language Switcher Mobile */}
                 <div className="relative">
                     <button 
@@ -791,7 +915,7 @@ function App() {
               className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg font-medium text-sm transition-colors"
             >
               <Settings className="w-4 h-4" />
-              <span className="hidden min-[480px]:inline">{t(lang, 'settings')}</span>
+              <span className="whitespace-nowrap hidden min-[480px]:inline">{t(lang, 'settings')}</span>
             </button>
           </div>
         </div>
@@ -801,15 +925,15 @@ function App() {
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 pb-20 custom-scrollbar">
         <div className="space-y-6" style={{ marginLeft: '3%', marginRight: '3%' }}>
           
-          {error && (
-            <div className={`${error.type == "warning" ? "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300" : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300" } px-4 py-3 rounded-xl flex items-center gap-3 text-sm animate-in slide-in-from-top-2 break-words`}>
+          {notification && (
+            <div className={`${notificationStyles[notification.type] ?? notificationStyles.error } px-4 py-3 rounded-xl flex items-center gap-3 text-sm animate-in slide-in-from-top-2 break-words`}>
               <Shield className="w-5 h-5 shrink-0" />
               <span className="flex-1">
-                {error.message}
+                {notification.messageKey ? t(lang, notification.messageKey) : notification.message}
 
-                {error.links?.length && (
+                {notification.links?.length && (
                   <span className = "inline-flex gap-2">
-                    {error.links?.map((url, idx) => (
+                    {notification.links?.map((url, idx) => (
                       <a
                         key={idx}
                         href={url}
@@ -817,10 +941,10 @@ function App() {
                         rel="noopener noreferrer"
                         className="text-telegram-700 hover:text-telegram-500 underline"
                       >
-                        {error.linkOptions?.linkText?.replace("__idx__", (idx + 1).toString()) || url}
+                        {notification.linkOptions?.linkText?.replace("__idx__", (idx + 1).toString()) || url}
                         &nbsp;
-                        {error.linkOptions?.showIcon && (
-                          error.linkOptions.icon
+                        {notification.linkOptions?.showIcon && (
+                          notification.linkOptions.icon
                         )}
                       </a>
                     ))}
@@ -1127,6 +1251,7 @@ function App() {
                             onPreview={(url, name, mime) => setPreviewFile({url, name, mime})}
                             isMenuOpen={activeMenuId === update.update_id}
                             onMenuToggle={() => setActiveMenuId(prev => prev === update.update_id ? null : update.update_id)}
+                            allFiles={files}
                         />
                     </div>
                 ))}

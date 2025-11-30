@@ -3,7 +3,8 @@ import { Download, Loader2, Link as LinkIcon, Check, Trash2, Folder, MoveRight, 
 import { FileIcon, defaultStyles } from 'react-file-icon';
 import { TelegramMessage, AppConfig } from '../types';
 import { formatBytes, isFilePreviewable, t } from '../constants';
-import { getFileDownloadUrl } from '../services/telegramService';
+import { getFileDownloadUrl, downloadFile, downloadAndReassembleChunks } from '../services/telegramService';
+import { Layers } from 'lucide-react';
 
 interface FileCardProps {
   message: TelegramMessage;
@@ -15,14 +16,17 @@ interface FileCardProps {
   // New props for controlled menu state
   isMenuOpen: boolean;
   onMenuToggle: () => void;
+  // Optional: all files for detecting chunks
+  allFiles?: TelegramMessage[];
 }
 
 export const FileCard: React.FC<FileCardProps> = ({ 
     message, config, onDeleteClick, onMoveClick, onNavigate, onPreview,
-    isMenuOpen, onMenuToggle
+    isMenuOpen, onMenuToggle, allFiles = []
 }) => {
   const [isCopying, setIsCopying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const doc = message.document;
   const isFolder = doc?.is_folder;
@@ -34,6 +38,8 @@ export const FileCard: React.FC<FileCardProps> = ({
   const mimeType = doc?.mime_type || (photo ? 'image/jpeg' : 'application/octet-stream');
   const fileId = doc?.file_id || photo?.file_id;
   const uniqueId = doc?.file_unique_id || photo?.file_unique_id;
+  const isSliced = doc?.is_sliced;
+  const totalChunks = doc?.chunks?.length;
 
   const actionId = fileId || uniqueId;
   const lang = config?.language;
@@ -54,12 +60,47 @@ export const FileCard: React.FC<FileCardProps> = ({
   // @ts-ignore
   const fileStyle = safeStyles[extension] || {};
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
       e.stopPropagation();
       onMenuToggle(); // Close menu
-      if (!fileId || isFolder) return;
-      const url = getFileDownloadUrl(config, fileId, fileName);
-      window.open(url, '_blank');
+      if (!fileId || isFolder || isDownloading) return;
+      
+      setIsDownloading(true);
+      try {
+          // Check if this is a chunk file
+          console.log('ddd', doc);
+          if (isSliced) {
+              const chunks = doc?.chunks || [];
+
+              console.log('Detected chunks for reassembly:', chunks);
+
+              if (chunks.length > 1) {
+                  // Multiple chunks - reassemble them
+                  const blob = await downloadAndReassembleChunks(config, chunks, fileName);
+                  
+                  // Create download link from reassembled blob
+                  const originalName = fileName.replace(/\.part\d+of\d+$/, '');
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = originalName;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(url);
+                  return;
+              }
+          }
+          
+          // Single file or unsupported chunk - use direct download
+          const url = getFileDownloadUrl(config, fileId, fileName);
+          window.open(url, '_blank');
+      } catch (error) {
+          console.error('Download error:', error);
+          alert(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+          setIsDownloading(false);
+      }
   };
 
   const handlePreview = (e: React.MouseEvent) => {
@@ -191,7 +232,20 @@ export const FileCard: React.FC<FileCardProps> = ({
             {isFolder ? (
                 <span className="whitespace-nowrap">{folderInfoStr}</span>
             ) : (
+              <>
                 <span className="whitespace-nowrap">{formatBytes(fileSize || 0)}</span>
+                {isSliced && (
+                  <span 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      alert(JSON.stringify(doc?.chunks, null, 2));
+                    }}
+                    className="flex items-center text-xs bg-blue-500/20 text-blue-500 dark:text-blue-300 px-1.5 py-0.5 rounded-md">
+                    <Layers className="w-3 h-3 mr-1" />
+                    {totalChunks}
+                  </span>
+                 )}
+              </>
             )}
 
             {!isFolder && (

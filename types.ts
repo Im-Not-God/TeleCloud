@@ -11,6 +11,8 @@ export interface TelegramDocument {
   file_name?: string;
   mime_type?: string;
   file_size?: number;
+  is_sliced ?: boolean;
+  chunks?: any;
   parent_id?: number | null; // ID of the folder from DB
   is_folder?: boolean;
   stats?: {
@@ -65,6 +67,11 @@ export interface FolderItem {
     id: number;
     name: string;
     parent_id: number | null;
+}
+
+export interface UploadFileItem {
+  file: File;
+  sliceGroupId?: string;
 }
 
 export type SortField = 'name' | 'date' | 'size';

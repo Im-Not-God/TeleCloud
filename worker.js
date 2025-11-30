@@ -200,8 +200,7 @@ async function handleListFiles(db, parentId, sortBy = 'date', order = 'desc') {
   // Always sort folders first (is_folder DESC means 1 first)
   const orderByClause = `ORDER BY f.is_folder DESC, ${sortCol} ${sortOrder}`;
 
-  // We perform a LEFT JOIN on the files table (aliased as 'c' for children) to count contents of folders
-  // We group by 'f' (the file/folder in current directory)
+  // Fetch all files including chunked ones
   let query = `
     SELECT 
       f.*,
@@ -219,8 +218,80 @@ async function handleListFiles(db, parentId, sortBy = 'date', order = 'desc') {
   
   const { results } = await db.prepare(query).bind(...params).all();
 
+  // Group sliced files: collect all chunks with the same slice_group_id
+  const sliceGroups = new Map();
+  const regularFiles = [];
+  
+  for (const row of results) {
+    if (row.slice_group_id) {
+      // This is a sliced file chunk
+      if (!sliceGroups.has(row.slice_group_id)) {
+        sliceGroups.set(row.slice_group_id, []);
+      }
+      sliceGroups.get(row.slice_group_id).push(row);
+    } else {
+      // Regular file or folder
+      regularFiles.push(row);
+    }
+  }
+
+  // Process sliced file groups
+  // For each group, only show the first chunk (or we could create a virtual "super-file")
+  const sliceFileRows = [];
+  for (const [groupId, chunks] of sliceGroups) {
+    // Sort chunks by index
+    chunks.sort((a, b) => (a.chunk_index || 0) - (b.chunk_index || 0));
+    
+    // Calculate total size of all chunks
+    const totalSize = chunks.reduce((sum, c) => sum + (c.file_size || 0), 0);
+    
+    // Use the first chunk as the representative, but update its metadata
+    const representative = { ...chunks[0] };
+    representative.file_name = representative.original_name; // Show original name
+    representative.file_size = totalSize; // Show total size
+    representative.chunk_index = null; // Not a chunk anymore, it's a group
+    representative.is_sliced = true; // Mark as sliced file
+    representative.total_chunks = chunks[0].chunk_total; // Store total chunks info
+    representative.chunks = chunks.map(data => ({
+      file_id: data.file_id, 
+      name: data.file_name,
+      size: data.file_size,
+      index: data.chunk_index,
+      slice_group_id: data.slice_group_id
+    }));
+    
+    sliceFileRows.push(representative);
+  }
+
+  // Combine regular files and sliced file groups
+  const allRows = [...regularFiles, ...sliceFileRows];
+  
+  // Re-sort combined results
+  allRows.sort((a, b) => {
+    // Folders first
+    if ((a.is_folder || 0) !== (b.is_folder || 0)) {
+      return (b.is_folder || 0) - (a.is_folder || 0);
+    }
+    
+    // Then by selected sort column
+    let aVal, bVal;
+    if (sortCol.includes('file_name')) {
+      aVal = (a.file_name || '').toLowerCase();
+      bVal = (b.file_name || '').toLowerCase();
+    } else if (sortCol.includes('file_size')) {
+      aVal = a.file_size || 0;
+      bVal = b.file_size || 0;
+    } else {
+      aVal = a.date || 0;
+      bVal = b.date || 0;
+    }
+    
+    const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+    return sortOrder === 'ASC' ? cmp : -cmp;
+  });
+
   // Map DB rows back to TelegramUpdate structure for frontend compatibility
-  const updates = results.map(row => mapRowToUpdate(row));
+  const updates = allRows.map(row => mapRowToUpdate(row));
 
   return new Response(JSON.stringify({ ok: true, result: updates }), {
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
@@ -238,6 +309,7 @@ async function handleSearchFiles(db, query) {
   const searchQuery = `%${query.trim()}%`;
   
   // Search across all files for this chat_id
+  // Search both file_name (for chunks) and original_name (for sliced files)
   const sql = `
     SELECT 
       f.*,
@@ -245,14 +317,46 @@ async function handleSearchFiles(db, query) {
       SUM(CASE WHEN c.is_folder = 1 THEN 1 ELSE 0 END) AS child_folders
     FROM files f
     LEFT JOIN files c ON c.parent_id = f.id
-    WHERE f.chat_id = ? AND f.file_name LIKE ?
+    WHERE f.chat_id = ? AND (f.file_name LIKE ? OR f.original_name LIKE ?)
     GROUP BY f.id
     ORDER BY f.is_folder DESC, f.date DESC
     LIMIT 50
   `;
   
-  const { results } = await db.prepare(sql).bind(HEADER_CHAT_ID, searchQuery).all();
-  const updates = results.map(row => mapRowToUpdate(row));
+  const { results } = await db.prepare(sql).bind(HEADER_CHAT_ID, searchQuery, searchQuery).all();
+  
+  // Apply same slicing grouping logic as handleListFiles
+  const sliceGroups = new Map();
+  const regularFiles = [];
+  
+  for (const row of results) {
+    if (row.slice_group_id) {
+      if (!sliceGroups.has(row.slice_group_id)) {
+        sliceGroups.set(row.slice_group_id, []);
+      }
+      sliceGroups.get(row.slice_group_id).push(row);
+    } else {
+      regularFiles.push(row);
+    }
+  }
+  
+  const sliceFileRows = [];
+  for (const [groupId, chunks] of sliceGroups) {
+    chunks.sort((a, b) => (a.chunk_index || 0) - (b.chunk_index || 0));
+    const totalSize = chunks.reduce((sum, c) => sum + (c.file_size || 0), 0);
+    
+    const representative = { ...chunks[0] };
+    representative.file_name = representative.original_name;
+    representative.file_size = totalSize;
+    representative.chunk_index = null;
+    representative.is_sliced = true;
+    representative.total_chunks = chunks[0].chunk_total;
+    
+    sliceFileRows.push(representative);
+  }
+  
+  const allRows = [...regularFiles, ...sliceFileRows];
+  const updates = allRows.map(row => mapRowToUpdate(row));
 
   return new Response(JSON.stringify({ ok: true, result: updates }), {
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
@@ -277,6 +381,8 @@ function mapRowToUpdate(row) {
               file_name: row.file_name,
               mime_type: row.mime_type,
               file_size: row.file_size,
+              is_sliced: row.is_sliced || false,
+              chunks: row.chunks || [],
               parent_id: row.parent_id,
               is_folder: !!row.is_folder,
               stats: row.is_folder ? {
@@ -333,6 +439,7 @@ async function handleUpload(request, db, token) {
   const formData = await request.formData();
   const document = formData.get('document');
   const parentId = formData.get('parent_id'); // Get folder context
+  const sliceGroupId = formData.get('slice_group_id');
 
   // Stream to Telegram
   const tgFormData = new FormData();
@@ -351,7 +458,7 @@ async function handleUpload(request, db, token) {
   }
 
   const msg = tgData.result;
-  await saveMessageToDb(db, msg, parentId);
+  await saveMessageToDb(db, msg, parentId, sliceGroupId);
 
   return new Response(JSON.stringify({ ok: true, result: msg }), {
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
@@ -397,32 +504,45 @@ async function handleImport(request, db, token) {
 async function handleDelete(request, db, token) {
     const { file_id } = await request.json();
 
-    // First, find the item to see if it's a folder
-    const item = await db.prepare("SELECT id, message_id, is_folder FROM files WHERE chat_id = ? AND (file_id = ? OR file_unique_id = ?)").bind(HEADER_CHAT_ID, file_id, file_id).first();
+    // First, find the item to see if it's a folder or a sliced file
+    const item = await db.prepare("SELECT id, message_id, is_folder, slice_group_id FROM files WHERE chat_id = ? AND (file_id = ? OR file_unique_id = ?)").bind(HEADER_CHAT_ID, file_id, file_id).first();
     let delResult = { msg: "not found" };
+    
     if (item) {
+        let itemsToDelete = [item];
+        
         if (item.is_folder) {
             // Delete content recursively (simple 1-level depth for now, or just delete children)
             // D1 doesn't support recursive CTEs easily in simple mode, so we just delete where parent_id matches
             // Ideally, the frontend warns about non-empty folders.
             await db.prepare("DELETE FROM files WHERE chat_id = ? AND parent_id = ?").bind(HEADER_CHAT_ID, item.id).run();
+        } else if (item.slice_group_id) {
+            // This is a sliced file - delete all chunks in the group
+            const allChunks = await db.prepare("SELECT id, message_id FROM files WHERE slice_group_id = ?").bind(item.slice_group_id).all();
+            itemsToDelete = allChunks.results || [item];
         }
-        const tgRes = await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ chat_id: HEADER_CHAT_ID, message_id: item.message_id })
-        });
-        const data = await tgRes.json();
-        await db.prepare("DELETE FROM files WHERE id = ?").bind(item.id).run();
+        
+        // Delete from Telegram and database
+        let failedDeletions = [];
+        for (const fileItem of itemsToDelete) {
+            const tgRes = await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ chat_id: HEADER_CHAT_ID, message_id: fileItem.message_id })
+            });
+            const data = await tgRes.json();
+            
+            if (!data.ok) {
+              failedDeletions.push(fileItem.message_id);
+            }
+            
+            await db.prepare("DELETE FROM files WHERE id = ?").bind(fileItem.id).run();
+        }
 
-        delResult = { msg: "only db data deleted" };
-        if(data){
-          let msgLinks = [];
-          if(!data.ok){
-            const rawChatId = String(HEADER_CHAT_ID).replace(/^-100/, '');
-            msgLinks = [`https://t.me/c/${rawChatId}/${item.message_id}`];
-          }
-          delResult = { msg: "db data deleted", tgRes: data, msgLinks: msgLinks };
+        delResult = { msg: itemsToDelete.length > 1 ? `Deleted ${itemsToDelete.length} chunks` : "only db data deleted" };
+        if (failedDeletions.length > 0) {
+          const rawChatId = String(HEADER_CHAT_ID).replace(/^-100/, '');
+          delResult.msgLinks = failedDeletions.map(mid => `https://t.me/c/${rawChatId}/${mid}`);
         }
     }
     
@@ -442,7 +562,7 @@ async function handleGetFileLink(token, fileId) {
   });
 }
 
-async function saveMessageToDb(db, msg, parentId = null) {
+async function saveMessageToDb(db, msg, parentId = null, sliceGroupId = null) {
     const doc = msg.document;
     const photo = msg.photo ? msg.photo[msg.photo.length - 1] : null;
     
@@ -457,10 +577,22 @@ async function saveMessageToDb(db, msg, parentId = null) {
     // Convert parentId to null if "null" string or undefined
     const validParentId = (parentId && parentId !== 'null') ? parseInt(parentId) : null;
 
+    // Detect if this is a sliced file
+    const chunkInfo = parseChunkFileName(fileName);
+    let originalName = fileName;
+    let chunkIndex = null;
+    let chunkTotal = null;
+
+    if (chunkInfo) {
+      originalName = chunkInfo.originalName;
+      chunkIndex = chunkInfo.index;
+      chunkTotal = chunkInfo.total;
+    }
+
     try {
       await db.prepare(
-          `INSERT INTO files (chat_id, message_id, file_id, file_unique_id, file_name, mime_type, file_size, date, is_photo, parent_id) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO files (chat_id, message_id, file_id, file_unique_id, file_name, mime_type, file_size, date, is_photo, parent_id, original_name, chunk_index, chunk_total, slice_group_id) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
           HEADER_CHAT_ID, 
           msg.message_id, 
@@ -471,7 +603,11 @@ async function saveMessageToDb(db, msg, parentId = null) {
           fileSize, 
           msg.date, 
           isPhoto ? 1 : 0, 
-          validParentId
+          validParentId,
+          originalName,
+          chunkIndex,
+          chunkTotal,
+          sliceGroupId
       ).run();
     } catch (err) {
       // 当 file_unique_id 重复时，这里捕获数据库 UNIQUE 约束报错
@@ -482,4 +618,16 @@ async function saveMessageToDb(db, msg, parentId = null) {
       }
       throw err;
   }
+}
+
+// Helper: Parse chunk filename to extract metadata
+function parseChunkFileName(fileName) {
+  const match = fileName.match(/^(.+?)\.part(\d+)of(\d+)$/);
+  if (!match) return null;
+  
+  return {
+    originalName: match[1],
+    index: parseInt(match[2], 10),
+    total: parseInt(match[3], 10)
+  };
 }

@@ -64,7 +64,6 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, url
       //    candidates = extAliasMap[ext]; // linguist 自动处理扩展名 + alias
       //    console.log('candi:',candidates);
       // }
-      console.log('candi:',candidates);
 
 
       // 自动检测（带候选语言）
