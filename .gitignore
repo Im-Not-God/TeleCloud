@@ -11,7 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
-schema.sql
+.wrangler
 
 # Editor directories and files
 .vscode/*
