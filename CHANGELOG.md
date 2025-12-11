@@ -1,5 +1,12 @@
 # 📦 Changelog
 
+## [0.1.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.0.1...v0.1.0) (2025-12-11)
+
+
+### Features
+
+* add GitHub Actions workflow for automated releases ([189b873](https://github.com/Im-Not-God/TeleCloud/commit/189b873c2142d43a49d5a98de8330d3dc6cdc827))
+
 ### 0.0.1 (2025-12-11)
 
 ### ✨ Features
