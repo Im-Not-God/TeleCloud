@@ -1,0 +1,30 @@
+{
+    "header": "# 📦 Changelog\n\n",
+    "types": [
+        {
+            "type": "feat",
+            "section": "✨ Features"
+        },
+        {
+            "type": "fix",
+            "section": "🐞 Bug Fixes"
+        },
+        {
+            "type": "refactor",
+            "section": "🔧 Refactors"
+        },
+        {
+            "type": "perf",
+            "section": "⚡ Performance"
+        },
+        {
+            "type": "ci",
+            "section": "🔁 CI"
+        },
+        {
+            "type": "chore",
+            "section": "🧹 Chores",
+            "hidden": false
+        }
+    ]
+}

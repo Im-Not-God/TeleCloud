@@ -1,23 +1,47 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Dark mode - v4 默认支持 class 策略 */
+
+  /* 字体配置 */
+  --font-sans: "Inter", sans-serif;
+
+  /* Telegram 品牌色 */
+  --color-telegram-50: #f0f9ff;
+  --color-telegram-100: #e0f2fe;
+  --color-telegram-200: #bae6fd;
+  --color-telegram-500: #229ed9;
+  --color-telegram-600: #1e88bd;
+  --color-telegram-700: #0369a1;
+  --color-telegram-800: #075985;
+  --color-telegram-900: #0c4a6e;
+}
+
 /* Custom scrollbar for webkit */
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-    background: transparent;
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
+  background: #cbd5e1;
+  border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+  background: #94a3b8;
 }
 
 /* Dark mode scrollbar */
 .dark ::-webkit-scrollbar-thumb {
-    background: #475569;
+  background: #475569;
 }
+
 .dark ::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
+  background: #64748b;
 }
