@@ -1,7 +1,7 @@
 {
   "name": "telecloud",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "deploy": "npx wrangler pages deploy dist",
     "publish": "vite build & npx wrangler pages deploy dist",
-    "exportschema": "npx wrangler d1 export telecloud-db --remote --output=./schema.sql --no-data"
+    "exportschema": "npx wrangler d1 export telecloud-db --remote --output=./schema.sql --no-data",
+    "prepare": "husky",
+    "release": "standard-version",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "github-markdown-css": "^5.8.1",
