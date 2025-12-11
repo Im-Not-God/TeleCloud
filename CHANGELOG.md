@@ -1,5 +1,12 @@
 # 📦 Changelog
 
+## [0.2.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.1.0...v0.2.0) (2025-12-11)
+
+
+### Features
+
+* Implement comprehensive download and upload enhancements with progress tracking ([50ccbc9](https://github.com/Im-Not-God/TeleCloud/commit/50ccbc91271fd56d992a710488332c8cb0ed3f32))
+
 ## [0.1.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.0.1...v0.1.0) (2025-12-11)
 
 
