@@ -20,5 +20,16 @@ export default {
         "vercel",
       ],
     ],
+    // type 不允为空
+    "type-empty": [2, "never"],
+
+    // subject 不为空
+    "subject-empty": [2, "never"],
+
+    // subject 不以 . 结尾
+    "subject-full-stop": [2, "never", "."],
+
+    // 允许中文（默认不限制，只是保险）
+    "subject-case": [0],
   },
 };

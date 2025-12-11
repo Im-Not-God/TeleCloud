@@ -1,10 +1,10 @@
 // eslint.config.js
-// eslint.config.js
 import tseslint from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 import reactHooks from "eslint-plugin-react-hooks";
 import eslintRecommended from "@eslint/js";
 import prettier from "eslint-config-prettier";
+import globals from "globals";
 
 export default [
   // 基础 JS 推荐规则
@@ -23,14 +23,27 @@ export default [
     ],
     languageOptions: {
       globals: {
-        module: "readonly",
-        require: "readonly",
-        __dirname: "readonly",
-        __filename: "readonly",
-        process: "readonly",
+        ...globals.node,
       },
     },
+    rules: {
+      "no-unused-vars": "warn",
+    },
   },
+
+  // Cloudflare Worker 环境
+  {
+    files: ["worker.js", "worker.ts"],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker, // Cloudflare Worker 基本 = Service Worker
+      },
+    },
+    rules: {
+      "no-unused-vars": "warn",
+    },
+  },
+
   // TS/TSX 项目规则（主要应用到 src/）
   {
     files: ["**/*.{ts,tsx}"],
@@ -39,6 +52,10 @@ export default [
       parserOptions: {
         sourceType: "module",
         ecmaVersion: "latest",
+      },
+      globals: {
+        ...globals.browser,
+        ...globals.es2021,
       },
     },
     plugins: {
@@ -54,6 +71,7 @@ export default [
       "@typescript-eslint/no-explicit-any": "off",
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
+      "no-undef": "warn",
     },
   },
 
