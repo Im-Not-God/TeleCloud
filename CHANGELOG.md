@@ -1,5 +1,12 @@
 # 📦 Changelog
 
+## [0.4.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.3.0...v0.4.0) (2025-12-13)
+
+
+### Features
+
+* **FilterMenu:** implement filter menu component with type and time selection ([42bf1c2](https://github.com/Im-Not-God/TeleCloud/commit/42bf1c206fa7ea3b95426ffd6c741634664d74be))
+
 ## [0.3.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.2.0...v0.3.0) (2025-12-13)
 
 
