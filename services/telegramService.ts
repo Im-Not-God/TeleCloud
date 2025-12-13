@@ -203,7 +203,7 @@ export const getPublicDownloadUrl = (
     n: fileName || "file",
   };
   const b64 = btoa(JSON.stringify(payload));
-  return `${window.location.origin}/link?s=${b64}`;
+  return `${window.location.origin}/share?s=${b64}`;
 };
 
 export const getDirectUrl = async (

@@ -12,7 +12,7 @@ import {
 import { FileIcon, defaultStyles } from "react-file-icon";
 import { TelegramMessage, AppConfig } from "../types";
 import { formatBytes, isFilePreviewable, t } from "../constants";
-import { getFileUrl } from "../services/telegramService";
+import { getFileUrl, getPublicDownloadUrl } from "../services/telegramService";
 import { downloadAndReassembleChunksWithProgress } from "../services/fileReassemblyService";
 import { Layers } from "lucide-react";
 
@@ -285,7 +285,7 @@ export const FileCard: React.FC<FileCardProps> = ({
     setIsCopying(true);
     try {
       if (!fileId) throw new Error("Missing file ID");
-      const url = getFileUrl(config, fileId, fileName);
+      const url = getPublicDownloadUrl(config, fileId, fileName);
       if (url) {
         await navigator.clipboard.writeText(url);
         setCopied(true);
