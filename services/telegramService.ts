@@ -104,12 +104,24 @@ export const getStoredFiles = async (
 export const searchFiles = async (
   config: AppConfig,
   query: string,
+  sort?: SortConfig,
 ): Promise<TelegramUpdate[]> => {
   try {
-    return await callWorker<TelegramUpdate[]>(
-      config,
-      `/search?q=${encodeURIComponent(query)}`,
-    );
+    const endpoint = `/search`;
+
+    // Build URL with params
+    const params = new URLSearchParams();
+    params.append("q", query);
+
+    if (sort) {
+      params.append("sort_by", sort.field);
+      params.append("order", sort.order);
+    }
+
+    const queryString = params.toString();
+    const fullEndpoint = queryString ? `${endpoint}?${queryString}` : endpoint;
+
+    return await callWorker<TelegramUpdate[]>(config, fullEndpoint);
   } catch (error) {
     console.error("Search failed", error);
     return [];
