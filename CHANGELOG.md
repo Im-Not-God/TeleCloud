@@ -1,5 +1,12 @@
 # 📦 Changelog
 
+## [0.3.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.2.0...v0.3.0) (2025-12-13)
+
+
+### Features
+
+* **search:** add highlighting, filtering, and sorting support ([43e4123](https://github.com/Im-Not-God/TeleCloud/commit/43e41238d23c516574a121421a5327ef75e8f50f))
+
 ## [0.2.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.1.0...v0.2.0) (2025-12-11)
 
 
