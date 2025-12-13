@@ -3,6 +3,9 @@ import ReactHtmlParser from "html-react-parser";
 
 export const TELEGRAM_API_BASE = "https://api.telegram.org";
 
+export const CONFIG_STORAGE_KEY = "telecloud_config";
+export const THEME_STORAGE_KEY = "telecloud_theme";
+
 export const CHUNK_SIZE = 20 * 1024 * 1024; // 20mb
 
 export const formatBytes = (bytes: number, decimals = 2) => {
@@ -180,6 +183,18 @@ export const translations = {
     filter_time_custom: "Custom Range",
     filter_custom_from: "From",
     filter_custom_to: "To",
+    share_error_title: "Error",
+    share_error_missingParams: "Invalid share link: Missing parameters",
+    share_error_malformedData: "Invalid share link: Malformed data",
+    share_loading: "Loading shared file…",
+    share_file_label: "Shared File",
+    share_download_button: "Download",
+    share_footer_hostedVia: "Hosted via TeleCloud",
+    share_error_generic: "Something went wrong",
+    share_error_expired: "This share link has expired",
+    share_error_notFound: "File not found",
+    share_error_permissionDenied:
+      "You do not have permission to access this file",
   },
   zh: {
     app_title: "TeleCloud",
@@ -315,6 +330,17 @@ export const translations = {
     filter_time_custom: "自定义范围",
     filter_custom_from: "从",
     filter_custom_to: "到",
+    share_error_title: "错误",
+    share_error_missingParams: "无效的分享链接：缺少参数",
+    share_error_malformedData: "无效的分享链接：数据格式错误",
+    share_loading: "正在加载分享文件…",
+    share_file_label: "已分享的文件",
+    share_download_button: "下载",
+    share_footer_hostedVia: "由 TeleCloud 提供",
+    share_error_generic: "发生未知错误",
+    share_error_expired: "该分享链接已失效",
+    share_error_notFound: "文件不存在",
+    share_error_permissionDenied: "你没有权限访问该文件",
   },
 };
 

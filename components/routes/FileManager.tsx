@@ -41,6 +41,8 @@ import {
   TimeFilter,
 } from "../../types";
 import {
+  CONFIG_STORAGE_KEY,
+  THEME_STORAGE_KEY,
   CHUNK_SIZE,
   formatBytes,
   t,
@@ -73,9 +75,6 @@ import { UploadQueue } from "../UploadQueue";
 import { PendingFileItem } from "../PendingFileItem";
 import { FilterMenu } from "../FilterMenu";
 import { SortMenu } from "../SortMenu";
-
-const CONFIG_STORAGE_KEY = "telecloud_config";
-const THEME_STORAGE_KEY = "telecloud_theme";
 
 // Breadcrumb item type
 interface Breadcrumb {

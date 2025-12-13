@@ -1,8 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, File as FileIcon, Loader2, AlertCircle } from "lucide-react";
-import { AppConfig, WorkerResponse } from "../../types";
-import { DEFAULT_WORKER_URL } from "../../types";
+import {
+  CONFIG_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  t,
+  DEFAULT_LANG,
+} from "../../constants";
 
 // Helper to decode the share payload
 // payload = base64(json({ w: workerUrl, f: fileId, n: fileName }))
@@ -21,7 +25,40 @@ export function SharePage() {
   const [searchParams] = useSearchParams();
   const shareParam = searchParams.get("s");
 
-  const result = React.useMemo(() => {
+  // Theme State
+  type Theme = "light" | "dark" | "system";
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    // Remove quotes if they exist (JSON.stringify adds them)
+    const cleanSaved = saved ? saved.replace(/"/g, "") : null;
+    return (cleanSaved as Theme) || "system";
+  });
+  useEffect(() => {
+    const isDark =
+      theme === "dark" ||
+      (theme === "system" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
+
+  // Lang
+  const [language, setLanguage] = useState(() => {
+    const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
+    return saved
+      ? JSON.parse(saved).language
+      : (navigator.languages?.[0] || navigator.language).split("-")[0] ||
+          DEFAULT_LANG;
+  });
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+
+  const result = useMemo(() => {
     if (!shareParam) {
       return { error: "Invalid share link: Missing parameters" };
     }
@@ -69,7 +106,9 @@ export function SharePage() {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-white p-4">
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <h1 className="text-xl font-bold mb-2">Error</h1>
+        <h1 className="text-xl font-bold mb-2">
+          {t(language, "share_error_title")}
+        </h1>
         <p className="text-slate-500 dark:text-slate-400">{result.error}</p>
       </div>
     );
@@ -93,7 +132,9 @@ export function SharePage() {
         <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 break-all">
           {result.fileInfo.fileName}
         </h2>
-        <p className="text-slate-500 dark:text-slate-400 mb-8">Shared File</p>
+        <p className="text-slate-500 dark:text-slate-400 mb-8">
+          {t(language, "share_file_label")}
+        </p>
 
         <a
           href={result.fileInfo.downloadUrl}
@@ -101,12 +142,14 @@ export function SharePage() {
         >
           <div className="flex items-center justify-center gap-2">
             <Download className="w-6 h-6" />
-            Download
+            {t(language, "share_download_button")}
           </div>
         </a>
 
         <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700">
-          <p className="text-xs text-slate-400">Hosted via TeleCloud</p>
+          <p className="text-xs text-slate-400">
+            {t(language, "share_footer_hostedVia")}
+          </p>
         </div>
       </div>
     </div>
