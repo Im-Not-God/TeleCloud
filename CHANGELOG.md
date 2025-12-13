@@ -1,5 +1,15 @@
 # 📦 Changelog
 
+## [0.5.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.4.0...v0.5.0) (2025-12-13)
+
+
+### Features
+
+* add SharePage component for file sharing functionality ([ab20be4](https://github.com/Im-Not-God/TeleCloud/commit/ab20be4811249330ed83b8859592e6ad0a9479ff))
+* **FilterMenu:** add internationalization support for filter labels and buttons ([5481857](https://github.com/Im-Not-God/TeleCloud/commit/54818577f3abeeef48d1bb84ea9c3127b9b9a4e8))
+* **search:** enhance searchFiles function to support sorting options ([e8dbe59](https://github.com/Im-Not-God/TeleCloud/commit/e8dbe59f8ad0bc0115fbed3353475b18c7869606))
+* **SharePage:** enhance sharing functionality with theme and language support ([dc41469](https://github.com/Im-Not-God/TeleCloud/commit/dc414695130ad349ef758ac1be5f652bb6766644))
+
 ## [0.4.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.3.0...v0.4.0) (2025-12-13)
 
 
