@@ -33,6 +33,8 @@ interface FileCardProps {
   onMenuToggle: () => void;
   // Optional: all files for detecting chunks
   allFiles?: TelegramMessage[];
+  // Highlight text for search
+  highlightText?: string;
   // Download modal callbacks
   onDownloadStart?: (
     taskId: string,
@@ -65,6 +67,7 @@ export const FileCard: React.FC<FileCardProps> = ({
   isMenuOpen,
   onMenuToggle,
   allFiles = [],
+  highlightText = "",
   onDownloadStart,
   onChunkProgress,
   onOverallProgress,
@@ -103,6 +106,30 @@ export const FileCard: React.FC<FileCardProps> = ({
   };
 
   const extension = getExtension(fileName);
+
+  // Helper to highlight text
+  const renderHighlightedName = (name: string, highlight: string) => {
+    if (!highlight || !highlight.trim()) {
+      return name;
+    }
+    const parts = name.split(new RegExp(`(${highlight})`, "gi"));
+    return (
+      <>
+        {parts.map((part, i) =>
+          part.toLowerCase() === highlight.toLowerCase() ? (
+            <span
+              key={i}
+              className="bg-yellow-200 text-slate-900 rounded-[2px]"
+            >
+              {part}
+            </span>
+          ) : (
+            part
+          ),
+        )}
+      </>
+    );
+  };
 
   // Safe access to styles to prevent crash if library import is partial/undefined
   const safeStyles = defaultStyles || {};
@@ -380,7 +407,7 @@ export const FileCard: React.FC<FileCardProps> = ({
             className="text-sm font-medium text-slate-900 dark:text-slate-200 pr-2 break-all"
             title={fileName}
           >
-            {fileName}
+            {renderHighlightedName(fileName, highlightText)}
           </h3>
           <div
             ref={metaContainerRef}

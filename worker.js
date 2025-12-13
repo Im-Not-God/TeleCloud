@@ -46,7 +46,7 @@ export default {
         return await handleListFiles(env.DB, url.searchParams, request);
       }
       if (path === "/search" && request.method === "GET") {
-        return await handleSearchFiles(env.DB, url.searchParams);
+        return await handleSearchFiles(env.DB, url.searchParams, request);
       }
       if (path === "/folders" && request.method === "GET") {
         return await handleListFolders(env.DB);
@@ -352,7 +352,7 @@ async function handleListFiles(db, urlSearchParams, request) {
   });
 }
 
-async function handleSearchFiles(db, urlSearchParams) {
+async function handleSearchFiles(db, urlSearchParams, request) {
   if (!db) throw new Error("Database not configured");
   const query = urlSearchParams.get("q");
   if (!query || query.trim() === "") {
@@ -360,6 +360,20 @@ async function handleSearchFiles(db, urlSearchParams) {
       headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
   }
+
+  const sortBy = urlSearchParams.get("sort_by") || "date";
+  const order = urlSearchParams.get("order") || "desc";
+  // Whitelist sort fields to prevent SQL injection
+  const validSorts = {
+    name: "f.file_name",
+    date: "f.date",
+    size: "f.file_size",
+  };
+  const validOrders = ["asc", "desc"];
+  const sortCol = validSorts[sortBy] || "f.date";
+  const sortOrder = validOrders.includes(order) ? order.toUpperCase() : "DESC";
+  // Always sort folders first (is_folder DESC means 1 first)
+  const orderByClause = `ORDER BY f.is_folder DESC, ${sortCol} ${sortOrder}`;
 
   const searchQuery = `%${query.trim()}%`;
 
@@ -374,13 +388,13 @@ async function handleSearchFiles(db, urlSearchParams) {
     LEFT JOIN files c ON c.parent_id = f.id
     WHERE f.chat_id = ? AND (f.file_name LIKE ?)
     GROUP BY f.id
-    ORDER BY f.is_folder DESC, f.date DESC
+    ${orderByClause}
     LIMIT 50
   `;
 
   const { results } = await db
     .prepare(sql)
-    .bind(HEADER_CHAT_ID, searchQuery, searchQuery)
+    .bind(HEADER_CHAT_ID, searchQuery)
     .all();
 
   // Apply same slicing grouping logic as handleListFiles
@@ -419,8 +433,31 @@ async function handleSearchFiles(db, urlSearchParams) {
   const allRows = [...regularFiles, ...sliceFileRows];
   const updates = allRows.map((row) => mapRowToUpdate(row));
 
+  const etag = await generateETag(updates);
+
+  // Read ETag from client
+  const clientETag = normalizeETag(request.headers.get("If-None-Match"));
+  const serverETag = normalizeETag(etag);
+
+  // If unchanged → return 304
+  if (clientETag && clientETag === serverETag) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        "Cache-Control": "no-cache",
+        ETag: etag,
+        ...CORS_HEADERS,
+      },
+    });
+  }
+
   return new Response(JSON.stringify({ ok: true, result: updates }), {
-    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+      ETag: etag,
+      ...CORS_HEADERS,
+    },
   });
 }
 

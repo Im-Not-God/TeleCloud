@@ -24,6 +24,8 @@ import {
   Download,
   Menu,
   Monitor,
+  Filter,
+  Calendar,
 } from "lucide-react";
 import {
   AppConfig,
@@ -34,6 +36,8 @@ import {
   SortOrder,
   DownloadTask,
   FileUploadStatus,
+  FilterType,
+  TimeFilter,
 } from "./types";
 import {
   CHUNK_SIZE,
@@ -66,6 +70,8 @@ import { FileCard } from "./components/FileCard";
 
 import { UploadQueue } from "./components/UploadQueue";
 import { PendingFileItem } from "./components/PendingFileItem";
+import { FilterMenu } from "./components/FilterMenu";
+import { SortMenu } from "./components/SortMenu";
 
 const CONFIG_STORAGE_KEY = "telecloud_config_v2";
 const THEME_STORAGE_KEY = "telecloud_theme";
@@ -143,6 +149,81 @@ function App() {
   ]);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
 
+  // ...
+
+  // In App function:
+  // Filter State
+  const [filterType, setFilterType] = useState<FilterType>("all");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+
+  // Filter Logic
+  const filteredFiles = files.filter((file) => {
+    const msg = file.message || file.channel_post;
+    if (!msg) return false;
+
+    // 1. Type Filter
+    let typeMatch = true;
+    if (filterType !== "all") {
+      const doc = msg.document;
+      const isFolder = doc?.is_folder;
+      const mime = doc?.mime_type || (msg.photo ? "image/jpeg" : "");
+
+      if (filterType === "folder") {
+        typeMatch = !!isFolder;
+      } else if (isFolder) {
+        // If specific type selected (e.g. Photo), hide folders?
+        // Usually file managers hide folders when filtering by file type, or show them?
+        // Let's hide folders if a specific file type is requested to reduce clutter.
+        typeMatch = false;
+      } else if (filterType === "photo") {
+        typeMatch = !!msg.photo || mime.startsWith("image/");
+      } else if (filterType === "video") {
+        typeMatch = mime.startsWith("video/");
+      } else if (filterType === "audio") {
+        typeMatch = mime.startsWith("audio/");
+      } else if (filterType === "document") {
+        const isMedia =
+          mime.startsWith("image/") ||
+          mime.startsWith("video/") ||
+          mime.startsWith("audio/");
+        typeMatch = !isMedia;
+      }
+    }
+    if (!typeMatch) return false;
+
+    // 2. Time Filter
+    let timeMatch = true;
+    const date = msg.date * 1000;
+    const now = Date.now();
+
+    if (timeFilter !== "all") {
+      if (timeFilter === "24h") {
+        timeMatch = now - date <= 24 * 60 * 60 * 1000;
+      } else if (timeFilter === "7d") {
+        timeMatch = now - date <= 7 * 24 * 60 * 60 * 1000;
+      } else if (timeFilter === "30d") {
+        timeMatch = now - date <= 30 * 24 * 60 * 60 * 1000;
+      } else if (timeFilter === "custom") {
+        const fileDate = new Date(date);
+        if (customStartDate) {
+          const start = new Date(customStartDate);
+          start.setHours(0, 0, 0, 0); // Start of day
+          if (fileDate < start) timeMatch = false;
+        }
+        if (customEndDate && timeMatch) {
+          const end = new Date(customEndDate);
+          end.setHours(23, 59, 59, 999); // End of day
+          if (fileDate > end) timeMatch = false;
+        }
+      }
+    }
+
+    return timeMatch;
+  });
+
   // Search State
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -166,6 +247,7 @@ function App() {
       setIsLangMenuOpen(false);
       setIsThemeMenuOpen(false);
       setIsSortMenuOpen(false);
+      setIsFilterMenuOpen(false);
     };
     window.addEventListener("click", handleClickOutside);
     return () => window.removeEventListener("click", handleClickOutside);
@@ -470,7 +552,7 @@ function App() {
         setIsSearching(true);
         setIsLoading(true);
         try {
-          const results = await searchFiles(config, searchQuery);
+          const results = await searchFiles(config, searchQuery, sortConfig);
           setFiles(results);
         } catch (e) {
           console.error(e);
@@ -842,6 +924,10 @@ function App() {
   const handleNavigate = (folderId: number | null, folderName: string) => {
     // Clear search if navigating folders
     if (searchQuery) setSearchQuery("");
+
+    // Optional: Keep filters or Clear? Keeping them might be useful.
+    // If user filters "Photos" and navigates to "Summer Trip", they likely still want Photos.
+    // Let's KEEP filters on navigation. But if user is confused why empty, they can see filter active.
 
     if (folderId === null) {
       setBreadcrumbs([{ id: null, name: t(lang, "home") as string }]);
@@ -1417,16 +1503,47 @@ function App() {
 
           {/* Controls: Navigation or Search Header */}
           {searchQuery !== "" ? (
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-700">
-              <Search className="w-5 h-5 text-telegram-500" />
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-                Search Results for "{searchQuery}"
-              </h2>
-              {isSearching && (
-                <span className="text-xs text-slate-400 animate-pulse ml-2">
-                  Searching...
-                </span>
-              )}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <Search className="w-5 h-5 text-telegram-500" />
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                  Search Results for "{searchQuery}"
+                </h2>
+                {isSearching && (
+                  <span className="text-xs text-slate-400 animate-pulse ml-2">
+                    Searching...
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <FilterMenu
+                  filterType={filterType}
+                  setFilterType={setFilterType}
+                  timeFilter={timeFilter}
+                  setTimeFilter={setTimeFilter}
+                  customStartDate={customStartDate}
+                  setCustomStartDate={setCustomStartDate}
+                  customEndDate={customEndDate}
+                  setCustomEndDate={setCustomEndDate}
+                  isOpen={isFilterMenuOpen}
+                  setIsOpen={(isOpen) => {
+                    setIsFilterMenuOpen(isOpen);
+                    if (isOpen) setIsSortMenuOpen(false);
+                  }}
+                />
+                <SortMenu
+                  sortConfig={sortConfig}
+                  setSortConfig={setSortConfig}
+                  isOpen={isSortMenuOpen}
+                  setIsOpen={(isOpen) => {
+                    setIsSortMenuOpen(isOpen);
+                    if (isOpen) setIsFilterMenuOpen(false);
+                  }}
+                  lang={lang}
+                  onSortChange={handleSortChange}
+                />
+              </div>
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-8">
@@ -1454,81 +1571,35 @@ function App() {
               </div>
 
               <div className="flex items-center gap-3 justify-end">
+                {/* Filter Dropdown */}
+                <FilterMenu
+                  filterType={filterType}
+                  setFilterType={setFilterType}
+                  timeFilter={timeFilter}
+                  setTimeFilter={setTimeFilter}
+                  customStartDate={customStartDate}
+                  setCustomStartDate={setCustomStartDate}
+                  customEndDate={customEndDate}
+                  setCustomEndDate={setCustomEndDate}
+                  isOpen={isFilterMenuOpen}
+                  setIsOpen={(isOpen) => {
+                    setIsFilterMenuOpen(isOpen);
+                    if (isOpen) setIsSortMenuOpen(false);
+                  }}
+                />
+
                 {/* Sort Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsSortMenuOpen(!isSortMenuOpen);
-                    }}
-                    className="whitespace-nowrap flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-telegram-600 dark:hover:text-telegram-400 hover:border-telegram-200 dark:hover:border-telegram-700 rounded-lg text-sm font-medium transition-all shadow-sm"
-                  >
-                    {sortConfig.order === "asc" ? (
-                      <ArrowUpNarrowWide className="w-4 h-4" />
-                    ) : (
-                      <ArrowDownNarrowWide className="w-4 h-4" />
-                    )}
-                    <span className="hidden min-[480px]:inline">
-                      {t(lang, "sort")}
-                    </span>
-                  </button>
-
-                  {isSortMenuOpen && (
-                    <div
-                      className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-100 dark:border-slate-700 z-30 py-1 animate-in fade-in zoom-in-95 duration-100 origin-top-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        {t(lang, "sort_by")}
-                      </div>
-
-                      {(["name", "date", "size"] as SortField[]).map(
-                        (field) => (
-                          <button
-                            key={field}
-                            onClick={() =>
-                              handleSortChange(field, sortConfig.order)
-                            }
-                            className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between capitalize"
-                          >
-                            {t(lang, field)}
-                            {sortConfig.field === field && (
-                              <Check className="w-4 h-4 text-telegram-500" />
-                            )}
-                          </button>
-                        ),
-                      )}
-
-                      <div className="h-px bg-slate-100 dark:bg-slate-700 my-1"></div>
-                      <div className="px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                        {t(lang, "order")}
-                      </div>
-
-                      <button
-                        onClick={() =>
-                          handleSortChange(sortConfig.field, "asc")
-                        }
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between"
-                      >
-                        {t(lang, "asc")}
-                        {sortConfig.order === "asc" && (
-                          <Check className="w-4 h-4 text-telegram-500" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() =>
-                          handleSortChange(sortConfig.field, "desc")
-                        }
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center justify-between"
-                      >
-                        {t(lang, "desc")}
-                        {sortConfig.order === "desc" && (
-                          <Check className="w-4 h-4 text-telegram-500" />
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <SortMenu
+                  sortConfig={sortConfig}
+                  setSortConfig={setSortConfig}
+                  isOpen={isSortMenuOpen}
+                  setIsOpen={(isOpen) => {
+                    setIsSortMenuOpen(isOpen);
+                    if (isOpen) setIsFilterMenuOpen(false);
+                  }}
+                  lang={lang}
+                  onSortChange={handleSortChange}
+                />
 
                 <button
                   onClick={() => setIsCreateFolderOpen(true)}
@@ -1552,27 +1623,45 @@ function App() {
           )}
 
           {/* Files Grid */}
-          {files.length === 0 && !isLoading ? (
+          {(files.length === 0 || filteredFiles.length === 0) && !isLoading ? (
             <div className="text-center py-20 opacity-50 bg-white dark:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-              {searchQuery !== "" ? (
-                <>
-                  <Search className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-                  <p className="text-slate-500 dark:text-slate-400 font-medium">
-                    {t(lang, "empty_search")}
-                  </p>
-                </>
+              {files.length === 0 ? (
+                searchQuery !== "" ? (
+                  <>
+                    <Search className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                    <p className="text-slate-500 dark:text-slate-400 font-medium">
+                      {t(lang, "empty_search")}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <HardDrive className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                    <p className="text-slate-500 dark:text-slate-400 font-medium">
+                      {t(lang, "empty_folder")}
+                    </p>
+                  </>
+                )
               ) : (
                 <>
-                  <HardDrive className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
-                  <p className="text-slate-500 dark:text-slate-400 font-medium">
-                    {t(lang, "empty_folder")}
+                  <Filter className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
+                  <p className="text-slate-500 dark:text-slate-400 font-medium mb-2">
+                    No files match the selected filters
                   </p>
+                  <button
+                    onClick={() => {
+                      setFilterType("all");
+                      setTimeFilter("all");
+                    }}
+                    className="text-telegram-500 hover:text-telegram-600 text-sm font-medium"
+                  >
+                    Clear Filters
+                  </button>
                 </>
               )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {files.map((update) => (
+              {filteredFiles.map((update) => (
                 <div
                   key={update.update_id}
                   onClick={() => {
@@ -1589,6 +1678,7 @@ function App() {
                     message={update.message || update.channel_post!}
                     config={config}
                     onDeleteClick={onRequestDelete}
+                    highlightText={searchQuery}
                     onMoveClick={(id, parentId) =>
                       setFileToMove({ id, parentId })
                     }

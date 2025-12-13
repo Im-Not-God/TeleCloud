@@ -114,3 +114,12 @@ export interface FileUploadStatus {
   status: "pending" | "uploading" | "completed" | "error" | "aborted";
   errorMsg?: string;
 }
+
+export type FilterType =
+  | "all"
+  | "photo"
+  | "video"
+  | "document"
+  | "audio"
+  | "folder";
+export type TimeFilter = "all" | "24h" | "7d" | "30d" | "custom";
