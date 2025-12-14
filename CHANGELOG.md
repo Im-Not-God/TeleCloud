@@ -1,5 +1,12 @@
 # 📦 Changelog
 
+## [0.7.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.6.0...v0.7.0) (2025-12-14)
+
+
+### Features
+
+* enhance layout and responsiveness of Footer and SharePage components ([8e2c4c2](https://github.com/Im-Not-God/TeleCloud/commit/8e2c4c213080007ce2fac24027b8598858eed478))
+
 ## [0.6.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.5.0...v0.6.0) (2025-12-13)
 
 
