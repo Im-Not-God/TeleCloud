@@ -1,5 +1,12 @@
 # 📦 Changelog
 
+## [0.8.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.7.0...v0.8.0) (2025-12-14)
+
+
+### Features
+
+* implement manual version check and update notification in Footer component ([6fe8355](https://github.com/Im-Not-God/TeleCloud/commit/6fe83557498b46160addfd4bb6f73289e18b2b80))
+
 ## [0.7.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.6.0...v0.7.0) (2025-12-14)
 
 
