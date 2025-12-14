@@ -1,5 +1,12 @@
 # 📦 Changelog
 
+## [0.9.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.8.0...v0.9.0) (2025-12-14)
+
+
+### Features
+
+* enhance Footer component with changelog modal and version check improvements ([3bef6e5](https://github.com/Im-Not-God/TeleCloud/commit/3bef6e5d221512a4291d7f892f526d05a14c65e2))
+
 ## [0.8.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.7.0...v0.8.0) (2025-12-14)
 
 
