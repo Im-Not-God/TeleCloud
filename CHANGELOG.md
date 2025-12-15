@@ -1,5 +1,16 @@
 # 📦 Changelog
 
+## [1.0.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.9.0...v1.0.0) (2025-12-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* 
+
+### Code Refactoring
+
+* restructure project to src/, use @ for import paths, and migrate to react-router v7 ([8c48ed3](https://github.com/Im-Not-God/TeleCloud/commit/8c48ed3bbef03a3912ceb60a977af0ff7dcb80b5))
+
 ## [0.9.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.8.0...v0.9.0) (2025-12-14)
 
 
