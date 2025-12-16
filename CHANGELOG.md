@@ -1,5 +1,23 @@
 # 📦 Changelog
 
+## [2.0.0](https://github.com/Im-Not-God/TeleCloud/compare/v1.0.0...v2.0.0) (2025-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Share link format has changed from object-based to array-based payload structure
+
+### Features
+
+* add multi-channel support ([23a0150](https://github.com/Im-Not-God/TeleCloud/commit/23a0150a1b2678130894f3faab3925cf884ca4f4))
+* add password protection for shared files and refactor FileManager layout ([0f28250](https://github.com/Im-Not-God/TeleCloud/commit/0f28250cdee3c421a69903d3dda2bff49e137a60))
+
+
+### Bug Fixes
+
+* decouple language state from config to prevent unnecessary fetchFiles calls ([9c4bc62](https://github.com/Im-Not-God/TeleCloud/commit/9c4bc62a2f78cbc3a9a3e6d9ac50e8494046a32a))
+* **worker:** skip Telegram API calls for folder delete ([ad933b0](https://github.com/Im-Not-God/TeleCloud/commit/ad933b0b694668b44d2ee929adb704ccf57931e6))
+
 ## [1.0.0](https://github.com/Im-Not-God/TeleCloud/compare/v0.9.0...v1.0.0) (2025-12-15)
 
 
